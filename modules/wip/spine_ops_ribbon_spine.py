@@ -4,44 +4,66 @@ from maya import OpenMaya as om
 from maya import OpenMayaUI as omui
 
 
-masterNode = mc.createNode("transform", n="RibbonSpine_System")
-
+masterNode = None
 bnList = []
 follower = []
 driver = []
 jointControls = []
 matList = []
 
-bnList.append("this_bn")
-bnList.append("this_bn1")
-bnList.append("this_bn2")
-bnList.append("this_bn3")
-bnList.append("this_bn4")
+PelvisPos = None
+Spine1Pos = None
+Spine2Pos = None
+Spine3Pos = None
+ChestPos = None
 
-PelvisPos = mc.xform(bnList[0], t=True, ws=True, q=True)
-Spine1Pos = mc.xform(bnList[1], t=True, ws=True, q=True)
-Spine2Pos = mc.xform(bnList[2], t=True, ws=True, q=True)
-Spine3Pos = mc.xform(bnList[3], t=True, ws=True, q=True)
-ChestPos = mc.xform(bnList[4], t=True, ws=True, q=True)
-
-PelvisMat = mc.xform(bnList[0], m=True, ws=True, q=True)
-Spine1Mat = mc.xform(bnList[1], m=True, ws=True, q=True)
-Spine2Mat = mc.xform(bnList[2], m=True, ws=True, q=True)
-Spine3Mat = mc.xform(bnList[3], m=True, ws=True, q=True)
-ChestMat = mc.xform(bnList[4], m=True, ws=True, q=True)
-
-matList.append(PelvisMat)
-matList.append(Spine1Mat)
-matList.append(Spine2Mat)
-matList.append(Spine3Mat)
-matList.append(ChestMat)
+PelvisMat = None
+Spine1Mat = None
+Spine2Mat = None
+Spine3Mat = None
+ChestMat = None
 
 
-def main():
+def main(*args):
+    global masterNode, bnList, follower, driver, jointControls, matList
+    global PelvisPos, Spine1Pos, Spine2Pos, Spine3Pos, ChestPos
+    global PelvisMat, Spine1Mat, Spine2Mat, Spine3Mat, ChestMat
+
+    masterNode = mc.createNode("transform", n="RibbonSpine_System")
+
+    bnList[:] = []
+    follower[:] = []
+    driver[:] = []
+    jointControls[:] = []
+    matList[:] = []
+
+    bnList.append("this_bn")
+    bnList.append("this_bn1")
+    bnList.append("this_bn2")
+    bnList.append("this_bn3")
+    bnList.append("this_bn4")
+
+    PelvisPos = mc.xform(bnList[0], t=True, ws=True, q=True)
+    Spine1Pos = mc.xform(bnList[1], t=True, ws=True, q=True)
+    Spine2Pos = mc.xform(bnList[2], t=True, ws=True, q=True)
+    Spine3Pos = mc.xform(bnList[3], t=True, ws=True, q=True)
+    ChestPos = mc.xform(bnList[4], t=True, ws=True, q=True)
+
+    PelvisMat = mc.xform(bnList[0], m=True, ws=True, q=True)
+    Spine1Mat = mc.xform(bnList[1], m=True, ws=True, q=True)
+    Spine2Mat = mc.xform(bnList[2], m=True, ws=True, q=True)
+    Spine3Mat = mc.xform(bnList[3], m=True, ws=True, q=True)
+    ChestMat = mc.xform(bnList[4], m=True, ws=True, q=True)
+
+    matList.append(PelvisMat)
+    matList.append(Spine1Mat)
+    matList.append(Spine2Mat)
+    matList.append(Spine3Mat)
+    matList.append(ChestMat)
+
     buildSurface()
     dupJoints()
     createDrivers()
-    #constrainSuface()
 
 
 def buildSurface():
@@ -56,10 +78,10 @@ def buildSurface():
             (ChestPos[0], ChestPos[1], ChestPos[2]),
         ],
     )
-    
-    dupCurve = mc.duplicate(crvs, n = "Ribbon_Spline_curve")
+
+    dupCurve = mc.duplicate(crvs, n="Ribbon_Spline_curve")
     mc.parent(dupCurve, masterNode)
-    
+
     mc.xform(crvs, t=[1, 0, 0], os=True)
     dup = mc.duplicate(crvs)
     mc.xform(dup, t=[-1, 0, 0], os=True)

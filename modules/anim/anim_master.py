@@ -58,8 +58,6 @@ class AnimMacros(object):
 
         mc.setParent("..")
 
-        mc.button
-
         # display new window
         mc.showWindow()
         mc.window(
@@ -121,11 +119,6 @@ class AnimMacros(object):
 
         mel.eval("manipMoveContext -edit -mode 0 Move;")
         mel.eval("manipRotateContext -e -mode 0 Rotate;")
-
-    def wldSpace(self, *args):
-
-        mel.eval("manipMoveContext -edit -mode 2 Move;")
-        mel.eval("manipRotateContext -e -mode 1 Rotate;")
 
     def wldSpace(self, *args):
 

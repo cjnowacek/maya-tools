@@ -9,7 +9,7 @@ import json
 import heapq
 
 from core.Config import Config
-from modules.rig import character_rig_template
+from modules.Rig import character_rig_template
 
 
 def main(*args):

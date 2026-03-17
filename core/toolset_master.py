@@ -17,8 +17,9 @@ License: GPL
 """
 import os
 import sys
+import inspect
 import importlib
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional
 
 from PySide2 import QtCore, QtWidgets
 from shiboken2 import wrapInstance
@@ -29,28 +30,19 @@ from maya.app.general.mayaMixin import MayaQWidgetDockableMixin
 
 from core.Config import Config
 
+TOOL_DISPLAY_NAME = "CJ's Maya Tools"
+
 
 def get_maya_main_window() -> QtWidgets.QWidget:
-    """
-    Return the Maya main window widget as a Python object.
-
-    Returns:
-        QtWidgets.QWidget: Maya's main window
-    """
     main_window_ptr = OpenMayaUI.MQtUtil.mainWindow()
     return wrapInstance(int(main_window_ptr), QtWidgets.QWidget)
 
 
+def format_display_name(module_name: str) -> str:
+    return module_name.replace("_", " ").title()
+
+
 def list_modules(script_path: str) -> List[str]:
-    """
-    Retrieve a list of Python script names from a directory.
-
-    Args:
-        script_path: Path to directory containing Python scripts
-
-    Returns:
-        List of module names without their .py extension
-    """
     if not os.path.exists(script_path):
         cmds.warning(f"Path does not exist: {script_path}")
         return []
@@ -64,30 +56,111 @@ def list_modules(script_path: str) -> List[str]:
 
 class ToolsetTab(QtWidgets.QWidget):
     """
-    Tab widget for each tool category containing script selection and execution controls.
+    Tab widget for each tool category. Dynamically renders parameter inputs
+    based on the selected script's main() signature.
     """
 
-    def __init__(self, parent: Optional[QtWidgets.QWidget] = None):
-        """Initialize the tab with basic UI elements."""
+    def __init__(self, script_path: str, parent: Optional[QtWidgets.QWidget] = None):
         super(ToolsetTab, self).__init__(parent)
+        self.script_path = script_path
+        self.param_widgets: Dict[str, QtWidgets.QLineEdit] = {}
 
-        # Create the script selection dropdown and run button
         self.script_combobox = QtWidgets.QComboBox()
         self.run_button = QtWidgets.QPushButton("Run")
-        self.parameter_input = QtWidgets.QLineEdit("")
 
-        # Layout configuration
+        # Generic fallback input (shown when main has no named params)
+        self.generic_label = QtWidgets.QLabel("Parameters:")
+        self.generic_input = QtWidgets.QLineEdit("")
+        self.generic_input.setPlaceholderText("Optional parameters")
+
+        # Dynamic per-parameter inputs
+        self.params_container = QtWidgets.QWidget()
+        self.params_form = QtWidgets.QFormLayout(self.params_container)
+        self.params_form.setContentsMargins(0, 0, 0, 0)
+
+        generic_row = QtWidgets.QHBoxLayout()
+        generic_row.addWidget(self.generic_label)
+        generic_row.addWidget(self.generic_input)
+
         layout = QtWidgets.QVBoxLayout(self)
         layout.addWidget(QtWidgets.QLabel("Select Script:"))
         layout.addWidget(self.script_combobox)
-
-        param_layout = QtWidgets.QHBoxLayout()
-        param_layout.addWidget(QtWidgets.QLabel("Parameters:"))
-        param_layout.addWidget(self.parameter_input)
-        layout.addLayout(param_layout)
-
+        layout.addWidget(self.params_container)
+        layout.addLayout(generic_row)
         layout.addWidget(self.run_button)
         layout.setAlignment(QtCore.Qt.AlignTop)
+
+        self.script_combobox.currentIndexChanged.connect(self._on_script_changed)
+
+    def _on_script_changed(self, index: int) -> None:
+        module_name = self.script_combobox.itemData(index)
+        self._refresh_params(module_name)
+
+    def _refresh_params(self, script_name: str) -> None:
+        """Inspect the selected module's main() and render per-parameter inputs."""
+        # Clear dynamic fields
+        while self.params_form.rowCount():
+            self.params_form.removeRow(0)
+        self.param_widgets.clear()
+
+        if not script_name or not self.script_path:
+            self._show_generic(True)
+            return
+
+        try:
+            if self.script_path not in sys.path:
+                sys.path.append(self.script_path)
+
+            if script_name in sys.modules:
+                mod = sys.modules[script_name]
+            else:
+                mod = importlib.import_module(script_name)
+
+            if not hasattr(mod, "main"):
+                self._show_generic(False)
+                return
+
+            sig = inspect.signature(mod.main)
+            named_params = [
+                (name, param)
+                for name, param in sig.parameters.items()
+                if param.kind not in (
+                    inspect.Parameter.VAR_POSITIONAL,
+                    inspect.Parameter.VAR_KEYWORD,
+                )
+            ]
+
+            if named_params:
+                self._show_generic(False)
+                for name, param in named_params:
+                    field = QtWidgets.QLineEdit()
+                    if param.default is not inspect.Parameter.empty:
+                        field.setText(str(param.default))
+                    self.params_form.addRow(name + ":", field)
+                    self.param_widgets[name] = field
+            else:
+                self._show_generic(True)
+
+        except Exception:
+            self._show_generic(True)
+
+    def _show_generic(self, visible: bool) -> None:
+        self.generic_label.setVisible(visible)
+        self.generic_input.setVisible(visible)
+
+    def get_kwargs(self) -> dict:
+        """Return named parameter values, casting to float/int where possible."""
+        result = {}
+        for name, widget in self.param_widgets.items():
+            text = widget.text()
+            for cast in (int, float):
+                try:
+                    text = cast(text)
+                    break
+                except (ValueError, TypeError):
+                    pass
+            result[name] = text
+        return result
 
 
 class ToolsetMaster(MayaQWidgetDockableMixin, QtWidgets.QDialog):
@@ -97,16 +170,13 @@ class ToolsetMaster(MayaQWidgetDockableMixin, QtWidgets.QDialog):
     """
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None):
-        """Initialize the main ToolsetMaster window."""
         parent = parent or get_maya_main_window()
         super(ToolsetMaster, self).__init__(parent)
 
-        # Get UI configuration
         ui_config = Config.get_ui_config("toolset_master")
-        self.setWindowTitle(ui_config.get("title", "Toolset Master"))
+        self.setWindowTitle(TOOL_DISPLAY_NAME)
         self.setMinimumSize(ui_config.get("width", 400), ui_config.get("height", 125))
 
-        # Adjust window flags for different operating systems
         if cmds.about(ntOS=True):
             self.setWindowFlags(
                 self.windowFlags() ^ QtCore.Qt.WindowContextHelpButtonHint
@@ -114,146 +184,86 @@ class ToolsetMaster(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         elif cmds.about(macOS=True):
             self.setWindowFlags(QtCore.Qt.Tool)
 
-        # Load available script modules
         self.module_names = {}
         for category, path in Config.TOOL_PATHS.items():
             self.module_names[category] = list_modules(path)
 
-        # Initialize UI elements
         self.create_widgets()
         self.create_layout()
         self.create_connections()
 
     def create_widgets(self) -> None:
-        """Create UI widgets and populate script selection lists."""
         self.tabs = {
-            "Wip": ToolsetTab(),
-            "Model": ToolsetTab(),
-            "Rig": ToolsetTab(),
-            "Anim": ToolsetTab(),
+            "Rig":   ToolsetTab(Config.get_tool_path("rig")),
+            "Anim":  ToolsetTab(Config.get_tool_path("anim")),
+            "Model": ToolsetTab(Config.get_tool_path("model")),
+            "Scene": ToolsetTab(Config.get_tool_path("scene")),
+            "Wip":   ToolsetTab(Config.get_tool_path("wip")),
         }
 
-        # Populate script dropdowns for each tab
         for key, tab in self.tabs.items():
-            script_list = self.module_names.get(key.lower(), [])
-            tab.script_combobox.addItems(script_list)
+            for module_name in self.module_names.get(key.lower(), []):
+                tab.script_combobox.addItem(format_display_name(module_name), module_name)
 
-            # Add placeholder text
-            tab.parameter_input.setPlaceholderText("Optional parameters for script")
-
-        # Create a tab widget and add each category as a separate tab
         self.tab_widget = QtWidgets.QTabWidget()
         for name, tab in self.tabs.items():
             self.tab_widget.addTab(tab, name)
 
     def create_layout(self) -> None:
-        """Define and set up the layout for the main window."""
         main_layout = QtWidgets.QVBoxLayout(self)
-
-        # Add info label
-        info_label = QtWidgets.QLabel(
-            "Select a script from any tab and click 'Run' to execute it."
-        )
-        info_label.setAlignment(QtCore.Qt.AlignCenter)
-        main_layout.addWidget(info_label)
-
-        # Add tab widget
+        title_label = QtWidgets.QLabel(TOOL_DISPLAY_NAME)
+        title_label.setAlignment(QtCore.Qt.AlignCenter)
+        title_label.setStyleSheet("font-weight: bold; font-size: 13px; padding: 4px;")
+        main_layout.addWidget(title_label)
         main_layout.addWidget(self.tab_widget)
 
     def create_connections(self) -> None:
-        """Connect button clicks to the script execution function."""
         for category, tab in self.tabs.items():
             tab.run_button.clicked.connect(
                 lambda checked=False, cat=category.lower(): self.run_script(cat)
             )
 
     def run_script(self, category: str) -> None:
-        """
-        Handle script execution based on the selected category and script.
-
-        Args:
-            category: The tool category (model, rig, anim, wip)
-        """
-        print(f"=== Starting run_script for category: {category} ===")
-        
         script_path = Config.get_tool_path(category)
-        print(f"Script path: {script_path}")
-        print(f"Script path exists: {os.path.exists(script_path)}")
-        
         tab = self.tabs[category.capitalize()]
-        selected_script = tab.script_combobox.currentText()
-        print(f"Selected script: {selected_script}")
+        selected_script = tab.script_combobox.currentData()
 
         if not selected_script:
             cmds.warning(f"No script selected in {category} tab")
             return
 
-        # Retrieve user-provided input from the text field
-        user_input = tab.parameter_input.text()
-        print(f"User input: {user_input}")
-
-        # Ensure the script's directory is in the Python path
         if script_path not in sys.path:
             sys.path.append(script_path)
-            print(f"Added {script_path} to Python path")
-
-        # Check for script file
-        script_file = os.path.join(script_path, f"{selected_script}.py")
-        print(f"Looking for script file: {script_file}")
-        print(f"Script file exists: {os.path.exists(script_file)}")
 
         try:
-            # Dynamically import or reload the selected script
-            print(f"Attempting to import module: {selected_script}")
-            
             if selected_script in sys.modules:
-                print(f"Module {selected_script} already imported, reloading...")
                 importlib.reload(sys.modules[selected_script])
             else:
-                print(f"Importing module {selected_script} for the first time...")
                 importlib.import_module(selected_script)
 
             module = sys.modules[selected_script]
-            print(f"Module imported: {module}")
-            
-            # List available attributes in the module
-            print("Module attributes:")
-            for attr in dir(module):
-                if not attr.startswith("__"):
-                    print(f"  - {attr}")
 
-            # Try executing the main function with user input
-            try:
-                if hasattr(module, "main"):
-                    print(f"Found main function in {selected_script}, executing...")
-                    result = module.main(user_input)
-                    print(f"Result from main function: {result}")
-                    
-                    if result and hasattr(result, "show"):
-                        print("Result has show method, calling it...")
-                        result.show()
-                else:
-                    print(f"No main function found in {selected_script}")
-                    cmds.warning(f"No main function found in {selected_script}")
-            except Exception as e:
-                print(f"Error executing {selected_script}: {e}")
-                cmds.warning(f"Error executing {selected_script}: {e}")
+            if not hasattr(module, "main"):
+                cmds.warning(f"No main() found in {selected_script}")
+                return
+
+            if tab.param_widgets:
+                result = module.main(**tab.get_kwargs())
+            else:
+                user_input = tab.generic_input.text()
+                result = module.main(user_input) if user_input else module.main()
+
+            if result and hasattr(result, "show"):
+                result.show()
+
         except ImportError as e:
-            print(f"Import error for {selected_script}: {e}")
             cmds.warning(f"Error importing {selected_script}: {e}")
         except Exception as e:
-            print(f"General error: {e}")
-            cmds.warning(f"General error: {e}")
-            
-        print("=== run_script completed ===")
-def show_ui() -> ToolsetMaster:
-    """
-    Display the ToolsetMaster window as a dockable widget in Maya.
+            cmds.warning(f"Error running {selected_script}: {e}")
+            print(f"[{selected_script}] {e}")
 
-    Returns:
-        Instance of the ToolsetMaster UI
-    """
-    # Close any existing instance
+
+def show_ui() -> ToolsetMaster:
     try:
         for widget in QtWidgets.QApplication.topLevelWidgets():
             if isinstance(widget, ToolsetMaster):
@@ -262,7 +272,6 @@ def show_ui() -> ToolsetMaster:
     except Exception as e:
         cmds.warning(f"Error closing existing widget: {e}")
 
-    # Create and show new instance
     ui = ToolsetMaster()
     ui.show(dockable=True, floating=True)
     return ui

@@ -14,10 +14,11 @@ class Config:
     
     # Tool categories and their directories
     TOOL_PATHS = {
-        "model": os.path.join(ROOT_DIR, "modules", "model"),
-        "rig": os.path.join(ROOT_DIR, "modules", "rig"),
-        "anim": os.path.join(ROOT_DIR, "modules", "anim"),
-        "wip": os.path.join(ROOT_DIR, "modules", "wip"),
+        "model": os.path.join(ROOT_DIR, "modules", "Model"),
+        "rig": os.path.join(ROOT_DIR, "modules", "Rig"),
+        "anim": os.path.join(ROOT_DIR, "modules", "Anim"),
+        "scene": os.path.join(ROOT_DIR, "modules", "Scene"),
+        "wip": os.path.join(ROOT_DIR, "modules", "Wip"),
     }
     
     # UI settings

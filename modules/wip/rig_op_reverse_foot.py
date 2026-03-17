@@ -60,4 +60,10 @@ class FootOps_ReverseFoot(object):
                 mc.parent(i, parentNode)
 
 
-myWindow = FootOps_ReverseFoot()
+def main(*args):
+    global myWindow
+    myWindow = FootOps_ReverseFoot()
+
+
+if __name__ == "__main__":
+    main()

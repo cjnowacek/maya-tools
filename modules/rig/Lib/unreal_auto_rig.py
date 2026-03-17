@@ -518,7 +518,7 @@ def BuildUnrealRig():
 
     createIkfkSwitch("arm", "r", "upperarm", "lowerarm", "hand", "ik")
 
-    # Creating twist joints--------------------------------------------------------------------------|
+    # Creating twist joints---------------------------------------------------------------------------
 
     # Create Joints, Correctives, etc
     """
@@ -531,3 +531,11 @@ def BuildUnrealRig():
     create_twist_joints("lowerarm_l", "hand_l", "lowerarm", "l", 5)
     create_twist_joints("lowerarm_r", "hand_r", "lowerarm", "r", 5)
     """
+
+
+def main(*args):
+    BuildUnrealRig()
+
+
+if __name__ == "__main__":
+    main()

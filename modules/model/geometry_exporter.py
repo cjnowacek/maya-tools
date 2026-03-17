@@ -159,5 +159,5 @@ class ToolOpsBatchGeoExporter(object):
             return None, None
 
 
-# To run the tool, uncomment the line below:
-main()
+if __name__ == "__main__":
+    main()

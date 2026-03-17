@@ -53,8 +53,8 @@ from PySide2.QtWidgets import (
 )
 
 
-from modules.rig.utils import joint_tools as jt
-from modules.rig.utils import rig_compiler as rc
+from modules.Rig.Lib import joint_tools as jt
+from modules.Rig.Lib import rig_compiler as rc
 
 
 # ------------------------------
@@ -160,7 +160,7 @@ class QuickToolsWindow(MayaQWidgetDockableMixin, QWidget):
         print("Save File Dialog Triggered")
 
     def unrealcontrolrig_action(self):
-        from modules.rig.utils import unreal_auto_rig as bUR
+        from modules.Rig.Lib import unreal_auto_rig as bUR
 
         bUR.BuildUnrealRig()
 
@@ -245,17 +245,6 @@ class QuickToolsWindow(MayaQWidgetDockableMixin, QWidget):
     # ------------------------------
     # Widgets
     # ------------------------------
-    def create_joint_axis_widget(self):
-        """Creates widget for controlling joint axis visibility."""
-        layout = QHBoxLayout()
-        show_axis_btn = QPushButton("Show Axis")
-        hide_axis_btn = QPushButton("Hide Axis")
-        show_axis_btn.clicked.connect(self.joint_module.turnOnJointAxisVis)
-        hide_axis_btn.clicked.connect(self.joint_module.turnOffJointAxisVis)
-        layout.addWidget(show_axis_btn)
-        layout.addWidget(hide_axis_btn)
-        return layout
-
     def create_joint_axis_widget(self):
         """Creates widget for controlling joint axis visibility."""
         layout = QHBoxLayout()
@@ -376,7 +365,7 @@ class QuickToolsWindow(MayaQWidgetDockableMixin, QWidget):
                 return
                 
             # Call the rig_compiler function with proper parameters
-            from modules.rig.utils import rig_compiler as rc
+            from modules.Rig.Lib import rig_compiler as rc
             rc.run(path, operation)
         except Exception as e:
             import traceback
@@ -414,5 +403,9 @@ def show_dockable_widget():
     tm_tab_window.show()
 
 
-# Execute the show function
-show_dockable_widget()
+def main(*args):
+    show_dockable_widget()
+
+
+if __name__ == "__main__":
+    main()

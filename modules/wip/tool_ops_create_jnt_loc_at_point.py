@@ -21,4 +21,10 @@ def create_JNT_LOC():
     cmds.parent(JNT, LOC)
     cmds.select(LOC)
 
-create_JNT_LOC()
+
+def main(*args):
+    create_JNT_LOC()
+
+
+if __name__ == "__main__":
+    main()

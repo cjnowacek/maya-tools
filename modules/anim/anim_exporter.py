@@ -238,5 +238,7 @@ def main():
     exporter = AnimOpsExportPrep()
     exporter.run()
     return exporter
-    
-main()
+
+
+if __name__ == "__main__":
+    main()
