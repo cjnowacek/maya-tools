@@ -1,24 +1,25 @@
 # ------------------------------
 # Imports
 # ------------------------------
-from PySide2 import QtWidgets
 import maya.cmds as cmds
 import os
 import shutil
 import json
 import heapq
+import logging
 
 from core.Config import Config
-from modules.Rig import character_rig_template
+
+logger = logging.getLogger(__name__)
 
 
 def main(*args):
     Config.update_paths()
 
-    print(Config.filepath)
-    print(Config.filename)
-    print(Config.raw_name)
-    print(Config.extension)
+    logger.debug(Config.filepath)
+    logger.debug(Config.filename)
+    logger.debug(Config.raw_name)
+    logger.debug(Config.extension)
 
     Config.desktop_path = os.path.join(
         # "C:\\" + "Dropbox\\Art\\Rigs\\__RigCompiler",
@@ -28,7 +29,6 @@ def main(*args):
         # "characterCompilerTest",
         f"{Config.raw_name}",
     )
-    # launch_mesh_ui()
 
 
 # ------------------------------
@@ -40,8 +40,8 @@ def get_texture_path(mesh):
     # Get the shape node of the mesh
     shapes = cmds.listRelatives(mesh, shapes=True) or []
     if not shapes:
-        print(
-            f"[WARNING] No shape found for {mesh}. It may be a group or empty transform."
+        logger.warning(
+            f"No shape found for {mesh}. It may be a group or empty transform."
         )
         return None
     shape_node = shapes[0]
@@ -51,24 +51,22 @@ def get_texture_path(mesh):
         object=shape_node, type=1
     )  # Type=1 ensures it's a shading group
     if not shading_groups:
-        print(
-            f"[WARNING] No shading group found for {mesh}. Material might be missing."
-        )
+        logger.warning(f"No shading group found for {mesh}. Material might be missing.")
         return None
     shading_group = shading_groups[0]
 
     # Get the material from the shading group
     materials = cmds.listConnections(f"{shading_group}.surfaceShader") or []
     if not materials:
-        print(f"[WARNING] No material found for {mesh}.")
+        logger.warning(f"No material found for {mesh}.")
         return None
     material = materials[0]
 
     # Find file nodes connected to the material
     file_nodes = cmds.listConnections(material, type="file") or []
     if not file_nodes:
-        print(
-            f"[WARNING] No file texture node found for {mesh}. It may be using procedural textures."
+        logger.warning(
+            f"No file texture node found for {mesh}. It may be using procedural textures."
         )
         return None
 
@@ -77,10 +75,10 @@ def get_texture_path(mesh):
         if cmds.attributeQuery("fileTextureName", node=file_node, exists=True):
             file_path = cmds.getAttr(f"{file_node}.fileTextureName")
             if file_path:
-                print(f"[INFO] Texture path for {mesh}: {file_path}")
+                logger.info(f"Texture path for {mesh}: {file_path}")
                 return file_path
 
-    print(f"[WARNING] No valid texture file found for {mesh}")
+    logger.warning(f"No valid texture file found for {mesh}")
     return None
 
 
@@ -121,7 +119,7 @@ def write_bone_data():
     with open(os.path.join(Config.desktop_path, "skeleton.json"), "w") as file:
         json.dump(bone_data, file, indent=4)
 
-    print(
+    logger.info(
         f"✅ Bone data saved correctly to {os.path.join(Config.desktop_path, 'skeleton.json')}"
     )
 
@@ -138,46 +136,46 @@ def get_selected_meshes():
 
 def export_selected_meshes():
     """Exports selected meshes as OBJ files and saves a JSON file with texture paths."""
-    print("=== EXPORT MESHES STARTING ===")
-    
+    logger.debug("=== EXPORT MESHES STARTING ===")
+
     # Debug print statements to verify paths
-    print(f"Desktop path: {Config.desktop_path}")
-    
+    logger.debug(f"Desktop path: {Config.desktop_path}")
+
     # Make sure desktop_path is an absolute path
     if not os.path.isabs(Config.desktop_path):
-        print(f"Warning: {Config.desktop_path} is not an absolute path!")
+        logger.warning(f"{Config.desktop_path} is not an absolute path!")
         Config.desktop_path = os.path.abspath(Config.desktop_path)
-        print(f"Converted to absolute path: {Config.desktop_path}")
-    
+        logger.debug(f"Converted to absolute path: {Config.desktop_path}")
+
     # Create main directory with error handling
     try:
         os.makedirs(Config.desktop_path, exist_ok=True)
-        print(f"Created/verified directory: {Config.desktop_path}")
+        logger.debug(f"Created/verified directory: {Config.desktop_path}")
     except Exception as e:
-        print(f"Error creating main directory: {e}")
+        logger.debug(f"Error creating main directory: {e}")
         return
-    
+
     # Create texture folder with improved error handling
     texture_folder = os.path.join(Config.desktop_path, "textures")
     try:
         os.makedirs(texture_folder, exist_ok=True)
-        print(f"Created/verified texture directory: {texture_folder}")
+        logger.debug(f"Created/verified texture directory: {texture_folder}")
     except PermissionError as e:
-        print(f"Permission error creating texture directory: {e}")
-        print("Trying alternative texture directory...")
+        logger.debug(f"Permission error creating texture directory: {e}")
+        logger.debug("Trying alternative texture directory...")
         # Try creating in a more accessible location
         texture_folder = os.path.join(os.path.expanduser("~"), "maya_temp_textures")
         os.makedirs(texture_folder, exist_ok=True)
-        print(f"Using alternative texture folder: {texture_folder}")
+        logger.debug(f"Using alternative texture folder: {texture_folder}")
     except Exception as e:
-        print(f"Error creating texture directory: {e}")
+        logger.debug(f"Error creating texture directory: {e}")
         return
-    
+
     mesh_data = {}
 
     selected_transforms = cmds.ls(selection=True, type="transform")
     if not selected_transforms:
-        print("No meshes selected!")
+        logger.debug("No meshes selected!")
         return
 
     selected_meshes = []
@@ -187,13 +185,13 @@ def export_selected_meshes():
             selected_meshes.append(transform)
 
     if not selected_meshes:
-        print("No valid mesh objects found!")
+        logger.debug("No valid mesh objects found!")
         return
 
     for mesh in selected_meshes:
         obj_file = os.path.join(Config.desktop_path, f"{mesh}.obj")
 
-        print("Exporting OBJ:", obj_file)
+        logger.debug(f"Exporting OBJ: {obj_file}")
 
         cmds.select(mesh)
         cmds.file(
@@ -220,8 +218,8 @@ def export_selected_meshes():
     with open(json_file, "w") as file:
         json.dump(mesh_data, file, indent=4)
 
-    print(f"Meshes and textures exported to {Config.desktop_path}")
-    print("=== EXPORT MESHES COMPLETED ===")
+    logger.info(f"Meshes and textures exported to {Config.desktop_path}")
+    logger.debug("=== EXPORT MESHES COMPLETED ===")
 
 
 def import_meshes_and_weights():
@@ -230,7 +228,7 @@ def import_meshes_and_weights():
 
     json_file = os.path.join(Config.desktop_path, "texture_data.json")
     if not os.path.exists(json_file):
-        print("No texture_data.json found!")
+        logger.debug("No texture_data.json found!")
         return
 
     with open(json_file, "r") as file:
@@ -239,17 +237,17 @@ def import_meshes_and_weights():
     for mesh, data in mesh_data.items():
         obj_file = os.path.join(Config.desktop_path, f"{mesh}.obj")
         if not os.path.exists(obj_file):
-            print(f"OBJ file missing for {mesh}, skipping import.")
+            logger.debug(f"OBJ file missing for {mesh}, skipping import.")
             continue
 
-        print(f"Importing: {obj_file}")
+        logger.debug(f"Importing: {obj_file}")
 
         before_import = set(cmds.ls(transforms=True))
         cmds.file(obj_file, i=True, renameAll=False, mergeNamespacesOnClash=False)
         after_import = set(cmds.ls(transforms=True))
         imported_objects = list(after_import - before_import)
 
-        print(f"Imported Objects: {imported_objects}")
+        logger.debug(f"Imported Objects: {imported_objects}")
 
         imported_mesh = None
         for obj in imported_objects:
@@ -258,14 +256,16 @@ def import_meshes_and_weights():
                 break
 
         if not imported_mesh:
-            print(f"Could not find {mesh} after import! Check object names in Maya.")
+            logger.debug(
+                f"Could not find {mesh} after import! Check object names in Maya."
+            )
             continue
 
         if imported_mesh != mesh:
             cmds.rename(imported_mesh, mesh)
             imported_mesh = mesh
 
-        print(f"Final Imported Mesh Name: {imported_mesh}")
+        logger.debug(f"Final Imported Mesh Name: {imported_mesh}")
 
         material_name = f"{mesh}_mat"
         shading_group = f"{material_name}_SG"
@@ -321,12 +321,14 @@ def import_meshes_and_weights():
             )
             cmds.setAttr(f"{material}.specularRoughness", 0.75)
 
-            print(f"Texture re-linked: {texture_path} to {mesh}")
+            logger.debug(f"Texture re-linked: {texture_path} to {mesh}")
         else:
-            print(f"Texture file missing for {mesh}, skipping texture assignment.")
+            logger.debug(
+                f"Texture file missing for {mesh}, skipping texture assignment."
+            )
 
-    print("Meshes imported and textures re-linked.")
-    
+    logger.info("Meshes imported and textures re-linked.")
+
     import_skin_weights()
 
 
@@ -341,13 +343,13 @@ def export_skin_weights():
 
     selected_meshes = cmds.ls(selection=True, type="transform")
     if not selected_meshes:
-        print("No meshes selected!")
+        logger.debug("No meshes selected!")
         return
 
     for mesh in selected_meshes:
         skin_clusters = cmds.ls(cmds.listHistory(mesh), type="skinCluster")
         if not skin_clusters:
-            print(f"[WARNING] No skinCluster found for {mesh}, skipping weight export.")
+            logger.warning(f"No skinCluster found for {mesh}, skipping weight export.")
             continue
 
         skin_cluster = skin_clusters[0]  # Get the first skinCluster found
@@ -385,14 +387,15 @@ def export_skin_weights():
     with open(weights_file, "w") as file:
         json.dump(weights_data, file, indent=4)
 
-    print(f"✅ Skin weights exported to {weights_file}")
+    logger.info(f"✅ Skin weights exported to {weights_file}")
+
 
 def import_skin_weights():
     """Reads the skin weights JSON and applies them to imported meshes manually."""
     weights_file = os.path.join(Config.desktop_path, "skin_weights.json")
 
     if not os.path.exists(weights_file):
-        print("[ERROR] No mesh_weights.json file found. Cannot import weights.")
+        logger.error("No mesh_weights.json file found. Cannot import weights.")
         return
 
     with open(weights_file, "r") as file:
@@ -400,17 +403,17 @@ def import_skin_weights():
 
     selected_meshes = cmds.ls(selection=True, type="transform")
     if not selected_meshes:
-        print("[WARNING] No meshes selected. Attempting to apply to all stored meshes.")
+        logger.warning("No meshes selected. Attempting to apply to all stored meshes.")
         selected_meshes = list(
             mesh_weights.keys()
         )  # Use all meshes from JSON if none are selected
 
     for mesh in selected_meshes:
         if mesh not in mesh_weights:
-            print(f"[WARNING] No weight data found for {mesh}, skipping import.")
+            logger.warning(f"No weight data found for {mesh}, skipping import.")
             continue
 
-        print(f"🔄 Importing weights for: {mesh}")
+        logger.debug(f"🔄 Importing weights for: {mesh}")
 
         # **Unlock transformations to prevent errors**
         for attr in [
@@ -428,13 +431,13 @@ def import_skin_weights():
                 f"{mesh}.{attr}", lock=True
             ):
                 cmds.setAttr(f"{mesh}.{attr}", lock=False)
-                print(f"🔓 Unlocked {attr} on {mesh}")
+                logger.debug(f"🔓 Unlocked {attr} on {mesh}")
 
         # **Find or create a skinCluster for the mesh**
         skin_clusters = cmds.ls(cmds.listHistory(mesh), type="skinCluster")
         if not skin_clusters:
-            print(
-                f"[INFO] No skinCluster found on {mesh}, binding joints before importing weights."
+            logger.info(
+                f"No skinCluster found on {mesh}, binding joints before importing weights."
             )
 
             # Get all joints listed in the stored weight data
@@ -448,8 +451,8 @@ def import_skin_weights():
                 filter(cmds.objExists, all_joints)
             )  # Ensure joints exist in the scene
             if not all_joints:
-                print(
-                    f"[ERROR] No valid joints found for {mesh}. Skipping weight import."
+                logger.error(
+                    f"No valid joints found for {mesh}. Skipping weight import."
                 )
                 continue
 
@@ -477,7 +480,7 @@ def import_skin_weights():
                     skin_cluster, vertex, transformValue=list(valid_influences.items())
                 )
 
-        print(f"✅ Successfully imported weights for {mesh}")
+        logger.info(f"✅ Successfully imported weights for {mesh}")
 
 
 # ------------------------------
@@ -486,13 +489,13 @@ def import_skin_weights():
 def create_bones():
     """Creates bones from stored skeleton data with correct orientation."""
     if not Config.desktop_path:
-        print("No file found")
+        logger.debug("No file found")
         return
 
     file_path = os.path.join(Config.desktop_path, "skeleton.json")
 
     if not os.path.exists(file_path):
-        print("No skeleton.json file found in the selected directory!")
+        logger.debug("No skeleton.json file found in the selected directory!")
         return
 
     with open(file_path, "r") as file:
@@ -523,17 +526,17 @@ def create_bones():
         if data["parent"] and data["parent"] in created_bones:
             cmds.parent(created_bones[bone], created_bones[data["parent"]])
 
-    print("✅ Bones recreated with correct hierarchy and orientations.")
+    logger.info("✅ Bones recreated with correct hierarchy and orientations.")
 
 
 def run(path, operation):
-    print(f"Operation: {operation}")
-    print(f"Path argument: {path}")
+    logger.debug(f"Operation: {operation}")
+    logger.debug(f"Path argument: {path}")
 
     # Update paths to make sure we have current file info
     Config.update_paths()
-    print(f"Config.filepath: {Config.filepath}")
-    print(f"Config.raw_name: {Config.raw_name}")
+    logger.debug(f"Config.filepath: {Config.filepath}")
+    logger.debug(f"Config.raw_name: {Config.raw_name}")
 
     # Check if we have a saved file
     if not Config.filepath or Config.filepath == "":
@@ -547,19 +550,18 @@ def run(path, operation):
         # Default path based on filename
         Config.desktop_path = os.path.join("C:\\", f"{Config.raw_name}")
 
-    print(f"Using output path: {Config.desktop_path}")
+    logger.debug(f"Using output path: {Config.desktop_path}")
 
     # Make sure the directory exists
     try:
         os.makedirs(Config.desktop_path, exist_ok=True)
-        print(f"Created/verified directory: {Config.desktop_path}")
+        logger.debug(f"Created/verified directory: {Config.desktop_path}")
     except Exception as e:
         cmds.warning(f"Error creating directory: {e}")
         return
 
     # Now run the requested operation
     if operation == "decompile":
-        get_selected_meshes()
         export_selected_meshes()
         export_skin_weights()
         write_bone_data()
@@ -568,7 +570,3 @@ def run(path, operation):
         import_meshes_and_weights()
     else:
         cmds.warning(f"Unknown operation: {operation}")
-
-
-if __name__ == "__main__":
-    run()

@@ -28,6 +28,9 @@ and control curves to facilitate character rigging.
 import maya.cmds as mc
 import maya.mel as mel
 import maya.OpenMaya as om
+import logging
+
+logger = logging.getLogger(__name__)
 
 CONTROL_RIG_FOLDER_NAME = "Control_Rig"
 
@@ -148,7 +151,7 @@ def createJointDups(suff):
         tmpboneList.append(i)
 
         if jnt != "root_{0}".format(suff):
-            print(jnt, prt)
+            logger.debug(f"{jnt} {prt}")
 
             mc.parent(jnt, prt[0] + "_{0}".format(suff))
 
@@ -377,34 +380,24 @@ def createIkfkSwitch(limb, side, sj, mj, ee):
     end_blend_color = mc.createNode(
         "blendColors", name=f"{limb}_{side}_{ee}_BLENDECOLOR"
     )
-    
+
     blenderList = []
     blenderList.append(root_blend_color)
     blenderList.append(mid_blend_color)
     blenderList.append(end_blend_color)
-    
+
     # Connecting IKFK blender root
-    mc.connectAttr(
-        f"{fkjoints1}.rotate", f"{root_blend_color}.color1"
-    )
-    mc.connectAttr(
-        f"{ikjoints1}.rotate", f"{root_blend_color}.color2"
-    )
-    mc.connectAttr(
-        f"{root_blend_color}.output", f"{driverjoints1}.rotate"
-    )
+    mc.connectAttr(f"{fkjoints1}.rotate", f"{root_blend_color}.color1")
+    mc.connectAttr(f"{ikjoints1}.rotate", f"{root_blend_color}.color2")
+    mc.connectAttr(f"{root_blend_color}.output", f"{driverjoints1}.rotate")
     # Connecting IKFK blender mid
     mc.connectAttr(f"{fkjoints2}.rotate", f"{mid_blend_color}.color1")
     mc.connectAttr(f"{ikjoints2}.rotate", f"{mid_blend_color}.color2")
-    mc.connectAttr(
-        f"{mid_blend_color}.output", f"{driverjoints2}.rotate"
-    )
+    mc.connectAttr(f"{mid_blend_color}.output", f"{driverjoints2}.rotate")
     # Connecting IKFK blender end
     mc.connectAttr(f"{fkjoints3}.rotate", f"{end_blend_color}.color1")
     mc.connectAttr(f"{ikjoints3}.rotate", f"{end_blend_color}.color2")
-    mc.connectAttr(
-        f"{end_blend_color}.output", f"{driverjoints3}.rotate"
-    )
+    mc.connectAttr(f"{end_blend_color}.output", f"{driverjoints3}.rotate")
     # Create Parent Constraints--------------------------------------------------------|
     mc.parentConstraint(fkjoints0, driverjoints0, mo=True)
     mc.parentConstraint(driverjoints0, bn0, mo=True)
@@ -412,9 +405,7 @@ def createIkfkSwitch(limb, side, sj, mj, ee):
     mc.parentConstraint(driverjoints2, bn2, mo=True)
     mc.parentConstraint(driverjoints3, bn3, mo=True)
     # Create Container----------------------------------------------------------------|
-    ikfk_attributes_Grp = mc.createNode(
-        "transform", name=f"{name}_ATRIBUTES_GRP"
-    )
+    ikfk_attributes_Grp = mc.createNode("transform", name=f"{name}_ATRIBUTES_GRP")
     mc.addAttr(ln="IKFK_Switch", at="float", k=True, min=0, max=1)
     arm_attributes_asset = mc.container(name=f"{name}_ASSET")
     mc.container(arm_attributes_asset, e=True, ish=True, f=True, an=ikfk_attributes_Grp)
@@ -481,8 +472,8 @@ def createFKSpine(pelvis, spine_01, spine_02, spine_03, spine_04):
         mc.select(grp, "{0}".format(boneList[i]))
         mel.eval("MatchTransform;")
         mc.makeIdentity(spine_control, r=True, a=True, s=True)
-    print(controlList)
-    print(groupList)
+    logger.debug(controlList)
+    logger.debug(groupList)
     mc.parent(groupList[4], controlList[3])
     mc.parent(groupList[3], controlList[2])
     mc.parent(groupList[2], controlList[1])

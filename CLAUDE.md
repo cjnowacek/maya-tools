@@ -4,66 +4,86 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-This is a Maya Python toolset — a collection of rigging, animation, and modeling utilities for Autodesk Maya. All code runs inside Maya's Python environment (Python 3.x) and relies on Maya's APIs (`maya.cmds`, `maya.mel`, `maya.OpenMayaUI`) and PySide2 for UI.
+A Maya Python toolset — rigging, animation, and modeling utilities for Autodesk Maya. All code runs inside Maya's embedded Python (3.x) and depends on Maya's APIs (`maya.cmds`, `maya.mel`, `maya.OpenMayaUI`) and PySide2/shiboken2 for UI. There is **no way to run, build, or test this outside of Maya** — there is no standalone interpreter entry point, no test suite, no linter config, and no package manifest.
 
 ## Running the Toolset
 
-There is no standalone build or test runner. Everything executes inside Maya's Script Editor or shelf button:
+Paste into Maya's Script Editor (Python tab) and run, or drag `toolset_launcher.py` onto a Maya shelf:
 
 ```python
-# Paste into Maya's Script Editor (Python tab) and run:
 exec(open(r"C:\path\to\toolset_launcher.py").read())
 ```
 
-Or drag `toolset_launcher.py` onto a Maya shelf. When running from the Script Editor (where `__file__` is undefined), update the hardcoded fallback path at `toolset_launcher.py:15`.
+`toolset_launcher.py` bootstraps `sys.path` (project root + `core/` + `modules/`), force-reloads any already-imported `core`/`modules`/`tools` submodules (so edits take effect without restarting Maya), then imports `core.toolset_master` and calls `show_ui()`.
 
-The launcher adds the project root, `core/`, and `modules/` to `sys.path`, then calls `toolset_master.show_ui()`.
+When running from the Script Editor, `__file__` is undefined, so the launcher falls back to the **hardcoded path at `toolset_launcher.py:15`** — update it to your checkout location.
 
 ## Architecture
 
-### Entry Point → Main UI → Tool Modules
+### Entry point → main UI → tool modules
 
 ```
-toolset_launcher.py          # Bootstraps sys.path, imports and calls toolset_master.show_ui()
-core/toolset_master.py       # Main dockable QDialog; tabs: WIP | Model | Rig | Anim
-core/Config.py               # Central config — TOOL_PATHS, UI sizes, joint defaults
+toolset_launcher.py        # sys.path bootstrap + reload; calls toolset_master.show_ui()
+core/
+  toolset_master.py        # Main dockable QDialog; tabs: Rig | Anim | Model | Scene | Wip
+  Config.py                # Central config: TOOL_PATHS, UI sizes, joint DEFAULTS, scene-path helpers
+  path_utils.py            # Scene file-path globals (legacy/standalone helper)
 modules/
-  Rig/                       # Production rigging tools
-    Lib/                     # Library modules imported by rig tools (not run directly)
-  Anim/                      # Animation export/prep tools
-  Model/                     # Geometry creation/export tools
-  Scene/                     # Scene-wide utilities
-  Wip/                       # Experimental tools (shown last in UI)
-  ThirdParty/                # Third-party helper libraries
+  rig/                     # Production rigging tools
+    Lib/                   # Library modules imported BY rig tools (not run via the UI)
+  anim/                    # Animation export/prep tools (+ anim/bak/ for dead code)
+  model/                   # Geometry creation/export tools
+  Scene/                   # Scene-wide utilities
+  wip/                     # Experimental tools (shown last in the UI)
+  ThirdParty/              # Third-party helpers (zbw_control_shapes.py, cometJointOrient.mel)
 ```
 
-### Tool Discovery and Execution
+### The `main(*args)` contract
 
-`toolset_master.py:list_modules()` scans each category directory for `*.py` files (excluding `__init__.py`) and populates the tab dropdowns. When a script is run, `ToolsetMaster.run_script()` dynamically imports (or reloads) the module and calls its `main(user_input)` function. **Every tool module must expose a `main(*args)` function** — it's the required entry point.
+**Every tool module must expose a top-level `main(...)` function** — it is the required and only entry point the UI calls. Modules in `Lib/` (e.g. `joint_tools.py`) are imported as helpers and are not invoked directly by the UI.
 
-### Rig Hierarchy Convention
+`ToolsetMaster.run_script()` dynamically imports (or `importlib.reload`s) the selected module and calls `main`. If `main` returns an object with a `.show()` method (a Qt widget), the UI shows it — this is how tools open their own secondary windows.
 
-`character_rig_handler.py` creates and expects this node structure in Maya:
+### Dynamic parameter UI (signature introspection)
+
+`core/toolset_master.py` is generic and knows nothing about individual tools. When a script is selected, `ToolsetTab._refresh_params()` calls `inspect.signature(mod.main)`:
+
+- If `main` has **named parameters**, the tab renders one labeled `QLineEdit` per parameter (pre-filled with the default). Values are passed as `**kwargs`, with each string cast to `int`/`float` when possible (`get_kwargs()`).
+- If `main` only takes `*args`/`**kwargs` (or none), the tab shows a single generic input passed as one positional string.
+
+Practical effect: to give a tool typed input fields in the UI, give its `main()` explicit named parameters (e.g. `def main(sphere_name="default_sphere", *args)`). Otherwise it gets the single free-text box.
+
+### Tool discovery
+
+`list_modules()` scans each `Config.TOOL_PATHS` directory for `*.py` files (skipping `__`-prefixed). The tab keys (`Rig`, `Anim`, …) map to category dirs via `Config.get_tool_path(category.lower())`. **Adding a new category requires updating `Config.TOOL_PATHS`** — it is the authoritative tab-name → directory mapping.
+
+Dropdown labels are derived from filenames by `format_display_name()` (underscores → spaces, title case: `create_sphere.py` → "Create Sphere"), so name tool files in snake_case.
+
+### Rig hierarchy convention
+
+`modules/rig/character_rig_handler.py` (a separate `MayaRigHandler` dialog, launched from the Rig tab) creates and expects this node structure:
 
 ```
 {name}_rig
   ├── {name}_Controls
   ├── {name}_Meshes
   │     ├── {name}_ExportMeshes   ← meshes exported to FBX
-  │     └── {name}_bak
+  │     └── {name}_bak            ← backup / WIP meshes
   └── {name}_Skeleton             ← root joint lives here
 ```
 
-`MayaRigHandler._find_rigs()` identifies rigs by finding transforms named `rig`, `RIG`, or ending with `_rig`.
+Rigs are detected **by name pattern, not node type or attribute**: `_find_rigs()` matches transforms named `rig`, `RIG`, or ending in `_rig`. Export selection walks this hierarchy with several fallbacks to find the root joint and export meshes.
 
 ### Secondary Rig UI
 
-`modules/Rig/rig_toolset.py` is a separate dockable window (`QuickToolsWindow`) with three tabs: Quick Tools (joint axis/orientation), Renamer, and Rig Compiler. It is invoked as a tool module (via `main()`) from the Rig tab, not from `toolset_master` directly.
+`modules/rig/rig_toolset.py` is a separate dockable window (`QuickToolsWindow`) with tabs for Quick Tools (joint axis/orientation), Renamer, and Rig Compiler. It is launched as a tool module via its `main()` from the Rig tab. It imports helpers from `Lib/` (`joint_tools`, `rig_compiler`).
 
-## Key Conventions
+## Key Conventions & Gotchas
 
-- **Tool modules** live in `modules/<Category>/` (PascalCase) and must have a `main(*args)` function.
-- **WIP tools** in `modules/Wip/` are for active development; they show last in the UI.
-- `Config.TOOL_PATHS` is the authoritative mapping from tab name to directory — update it when adding new categories.
-- Rigs are detected by name pattern (`_rig` suffix), not by node type or attribute.
-- FBX export settings are hardcoded in `character_rig_handler._export_rig()` — the output path (`C:/dropbox/your_file.fbx`) is a placeholder that needs updating.
+- **Case-sensitivity mismatch (important):** `Config.TOOL_PATHS` and intra-package imports use **PascalCase** package names (`modules/Rig`, `modules/Model`, `from modules.Rig.Lib import joint_tools`), but the directories on disk are **lowercase** (`modules/rig`, `modules/model`). This works on Windows/macOS (case-insensitive filesystems, where Maya runs) but **breaks on case-sensitive Linux**. When editing imports or `TOOL_PATHS`, preserve the existing PascalCase spellings rather than "fixing" them to match the lowercase dirs — and be aware static checks on Linux may fail to resolve these.
+- **Lib imports go through the package path** `from modules.Rig.Lib import ...` and `from core.Config import Config`, which only resolve because the launcher put the project root on `sys.path`.
+- **Hardcoded paths need updating before use:** the launcher fallback (`toolset_launcher.py:15`) and FBX export output in `character_rig_handler._export_rig()` (`C:/dropbox/your_file.fbx`) are placeholders. FBX export settings there are hardcoded MEL `FBXExport*` calls.
+- **Code style:** black-style formatting; snake_case filenames and functions. Use a module-level `logger = logging.getLogger(__name__)` for diagnostics rather than `print`, and `cmds.warning(...)` for user-facing warnings in Maya.
+- **WIP tools** (`modules/wip/`) are active-development and show last in the UI; treat them as unstable.
+- `modules/anim/bak/` holds superseded code; don't wire it into anything.
+- No automated tests or CI — verification is manual, inside Maya.

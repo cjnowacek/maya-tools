@@ -1,13 +1,11 @@
 from maya import cmds as mc
-import maya.mel as mel
-from maya import OpenMaya as om
-from maya import OpenMayaUI as omui
 
 
 def main():
     mainBodyLocs = spineLoc()
-    armLocs = armLocs()
-    legLocs = legLocs()
+    arm = armLocs()
+    leg = legLocs()
+
 
 # main body
 class RigOps_mainBodyLocs(object):

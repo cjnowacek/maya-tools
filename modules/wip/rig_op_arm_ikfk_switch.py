@@ -10,9 +10,11 @@ Auto Pole Vector
 """
 
 import maya.cmds as mc
-import maya.mel as mel
 from maya import OpenMaya as om
-from maya import OpenMayaUI as omui
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def main():
@@ -367,7 +369,7 @@ def RigOps_ArmIKFKSwitch(side="L"):
 
     get_pole_vec_pos(root_joint_pos, mid_joint_pos, end_joint_pos)
 
-    print(topnode)
+    logger.debug(topnode)
 
     # Visiblity connections
 

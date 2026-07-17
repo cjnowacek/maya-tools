@@ -71,8 +71,7 @@ class AnimMacros(object):
 
     def resetControl(self, *args):
 
-        mel.eval(
-            """string $ctrlName[] = `ls -sl`;
+        mel.eval("""string $ctrlName[] = `ls -sl`;
             for ($con in $ctrlName){
             catchQuiet(`setAttr ($con + ".translateX") 0`);
             catchQuiet(`setAttr ($con + ".translateY") 0`);
@@ -84,8 +83,7 @@ class AnimMacros(object):
             catchQuiet(`setAttr ($con + ".scaleY") 1`);
             catchQuiet(`setAttr ($con + ".scaleZ") 1`);
             }
-            """
-        )
+            """)
 
     def selectOnlyCRVs(self, *args):
 

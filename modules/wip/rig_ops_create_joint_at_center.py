@@ -1,6 +1,4 @@
 import maya.cmds as mc
-import maya.mel as mel
-from maya import OpenMaya as om
 
 
 def main(*args):

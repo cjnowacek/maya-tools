@@ -15,10 +15,12 @@ Author: CJ Nowacek
 Version: 2.0.0
 License: GPL
 """
+
 import os
 import sys
 import inspect
 import importlib
+import logging
 from typing import Dict, List, Optional
 
 from PySide2 import QtCore, QtWidgets
@@ -29,6 +31,8 @@ from maya import OpenMayaUI
 from maya.app.general.mayaMixin import MayaQWidgetDockableMixin
 
 from core.Config import Config
+
+logger = logging.getLogger(__name__)
 
 TOOL_DISPLAY_NAME = "CJ's Maya Tools"
 
@@ -124,7 +128,8 @@ class ToolsetTab(QtWidgets.QWidget):
             named_params = [
                 (name, param)
                 for name, param in sig.parameters.items()
-                if param.kind not in (
+                if param.kind
+                not in (
                     inspect.Parameter.VAR_POSITIONAL,
                     inspect.Parameter.VAR_KEYWORD,
                 )
@@ -194,16 +199,18 @@ class ToolsetMaster(MayaQWidgetDockableMixin, QtWidgets.QDialog):
 
     def create_widgets(self) -> None:
         self.tabs = {
-            "Rig":   ToolsetTab(Config.get_tool_path("rig")),
-            "Anim":  ToolsetTab(Config.get_tool_path("anim")),
+            "Rig": ToolsetTab(Config.get_tool_path("rig")),
+            "Anim": ToolsetTab(Config.get_tool_path("anim")),
             "Model": ToolsetTab(Config.get_tool_path("model")),
             "Scene": ToolsetTab(Config.get_tool_path("scene")),
-            "Wip":   ToolsetTab(Config.get_tool_path("wip")),
+            "Wip": ToolsetTab(Config.get_tool_path("wip")),
         }
 
         for key, tab in self.tabs.items():
             for module_name in self.module_names.get(key.lower(), []):
-                tab.script_combobox.addItem(format_display_name(module_name), module_name)
+                tab.script_combobox.addItem(
+                    format_display_name(module_name), module_name
+                )
 
         self.tab_widget = QtWidgets.QTabWidget()
         for name, tab in self.tabs.items():
@@ -260,7 +267,7 @@ class ToolsetMaster(MayaQWidgetDockableMixin, QtWidgets.QDialog):
             cmds.warning(f"Error importing {selected_script}: {e}")
         except Exception as e:
             cmds.warning(f"Error running {selected_script}: {e}")
-            print(f"[{selected_script}] {e}")
+            logger.error(f"[{selected_script}] {e}")
 
 
 def show_ui() -> ToolsetMaster:

@@ -1,7 +1,8 @@
-from maya import cmds
-from maya import mel as mel
+import logging
 
-from core.Config import Config
+from maya import cmds
+
+logger = logging.getLogger(__name__)
 
 
 class JointCreateAndOrientator(object):
@@ -67,10 +68,11 @@ class JointCreateAndOrientator(object):
             cmds.setAttr(jnt + ".displayLocalAxis", 0)
 
     def createControl(self):
-        print("this is a placeholder")
+        logger.debug("createControl is a placeholder")
+
 
 def freeze_rotation_on_joints():
-        
+
     # Get the currently selected objects
     selected_objects = cmds.ls(selection=True)
 
@@ -83,7 +85,7 @@ def freeze_rotation_on_joints():
         rotate_x_value = cmds.getAttr(f"{joint_name}.rotateX")
         rotate_y_value = cmds.getAttr(f"{joint_name}.rotateY")
         rotate_z_value = cmds.getAttr(f"{joint_name}.rotateZ")
-        
+
         # Get the current joint orientation values of the joint
         orient_x_value = cmds.getAttr(f"{joint_name}.jointOrientX")
         orient_y_value = cmds.getAttr(f"{joint_name}.jointOrientY")
@@ -98,15 +100,16 @@ def freeze_rotation_on_joints():
         cmds.setAttr(f"{joint_name}.jointOrientX", new_x_value)
         cmds.setAttr(f"{joint_name}.jointOrientY", new_y_value)
         cmds.setAttr(f"{joint_name}.jointOrientZ", new_z_value)
-        
+
         # Reset the joint's rotation values to zero
         cmds.setAttr(f"{joint_name}.rotateX", 0)
         cmds.setAttr(f"{joint_name}.rotateY", 0)
         cmds.setAttr(f"{joint_name}.rotateZ", 0)
-        
+
     else:
-        # Print a warning message if no object is selected
-        print("No objects selected. Please select a joint.")
+        # Warn if no object is selected
+        logger.warning("No objects selected. Please select a joint.")
+
 
 def always_deform():
     pass

@@ -1,9 +1,11 @@
+import logging
 import maya.cmds as cmds
 import maya.mel as mel
-from PySide2 import QtWidgets, QtCore, QtGui
+from PySide2 import QtWidgets, QtCore
 import maya.OpenMayaUI as omui
 from shiboken2 import wrapInstance
-import sys
+
+logger = logging.getLogger(__name__)
 
 
 def maya_main_window():
@@ -261,7 +263,7 @@ class MayaRigHandler(QtWidgets.QDialog):
     # ==================================
     # Main Functions
     # ==================================
-    
+
     def _create_character_template(self):
         """
         Create a character rig template hierarchy.
@@ -285,18 +287,21 @@ class MayaRigHandler(QtWidgets.QDialog):
         cmds.createNode("transform", name=f"{rig_name}_Controls", parent=self.rig_node)
 
         # Create 'Meshes' nodes under the rig
-        meshes_node = cmds.createNode("transform", name=f"{rig_name}_Meshes", parent=self.rig_node)
+        meshes_node = cmds.createNode(
+            "transform", name=f"{rig_name}_Meshes", parent=self.rig_node
+        )
 
         # Create 'ExportMeshes' and 'bak' nodes under 'Meshes'
-        cmds.createNode("transform", name=f"{rig_name}_ExportMeshes", parent=meshes_node)
+        cmds.createNode(
+            "transform", name=f"{rig_name}_ExportMeshes", parent=meshes_node
+        )
         cmds.createNode("transform", name=f"{rig_name}_bak", parent=meshes_node)
 
         # Create 'Skeleton' nodes under the rig
         cmds.createNode("transform", name=f"{rig_name}_Skeleton", parent=self.rig_node)
 
-        # Print the created hierarchy for verification
-        print("Hierarchy created:")
-        print(cmds.ls(self.rig_node, dag=True))
+        # Log the created hierarchy for verification
+        logger.debug("Hierarchy created: %s", cmds.ls(self.rig_node, dag=True))
 
         # Refresh the rig lists
         self._refresh_rig_list()
@@ -324,8 +329,8 @@ class MayaRigHandler(QtWidgets.QDialog):
         template_rig = selected_items[0].text()
 
         # Get the new rig name
-        rig_name = self.rig_name.text()
-        if not self.rig_name.text():
+        rig_name = self.name_field.text()
+        if not self.name_field.text():
             QtWidgets.QMessageBox.warning(
                 self, "Warning", "Please enter a name for the new rig."
             )
@@ -369,7 +374,8 @@ class MayaRigHandler(QtWidgets.QDialog):
             )
 
             # Select the new rig
-            cmds.select(rig_name)
+            if cmds.objExists(rig_name):
+                cmds.select(rig_name)
 
         except Exception as e:
             QtWidgets.QMessageBox.critical(
@@ -380,11 +386,11 @@ class MayaRigHandler(QtWidgets.QDialog):
         """
         Process all selected rigs in the UI.
         """
-        
+
         self._query_rig_for_export()
-        
+
         cmds.parent(world=True)
-        
+
         # === Animation Settings ===
         mel.eval("FBXExportBakeComplexAnimation -v true")
         mel.eval("FBXExportBakeComplexStart -v 1")
@@ -404,8 +410,8 @@ class MayaRigHandler(QtWidgets.QDialog):
 
         # === Deformation ===
         mel.eval("FBXExportSkins -v true")
-        #mel.eval("FBXExportShapes -v true")
-        #mel.eval("FBXExportBlendShapes -v true")
+        # mel.eval("FBXExportShapes -v true")
+        # mel.eval("FBXExportBlendShapes -v true")
 
         # === Connections & Constraints ===
         mel.eval("FBXExportInputConnections -v false")
@@ -422,25 +428,25 @@ class MayaRigHandler(QtWidgets.QDialog):
 
         # === File & Output ===
         mel.eval("FBXExportGenerateLog -v true")
-        mel.eval("FBXExportFileVersion -v \"FBX202000\"")
+        mel.eval('FBXExportFileVersion -v "FBX202000"')
         mel.eval("FBXExportInAscii -v false")
 
         # === Advanced ===
-        #mel.eval("FBXExportAxisConversionMethod -v \"none\"")  # or "convertAnimation"
-        #mel.eval("FBXExportQuaternion -v \"euler\"")  # or "resample", "quaternion"
+        # mel.eval("FBXExportAxisConversionMethod -v \"none\"")  # or "convertAnimation"
+        # mel.eval("FBXExportQuaternion -v \"euler\"")  # or "resample", "quaternion"
 
-        cmds.file("C:/dropbox/your_file.fbx",
-                force=True,
-                options="v=0;",
-                type="FBX export",
-                preserveReferences=True,
-                exportSelected=True)
-        
+        cmds.file(
+            "C:/dropbox/your_file.fbx",
+            force=True,
+            options="v=0;",
+            type="FBX export",
+            preserveReferences=True,
+            exportSelected=True,
+        )
 
     def _export_animation(self):
-        #this = _query_rig_for_export(self)
-        
         pass
+
     # ==================================
     # Helper Functions
     # ==================================
@@ -484,8 +490,8 @@ class MayaRigHandler(QtWidgets.QDialog):
                 try:
                     cmds.namespace(removeNamespace=ns, mergeNamespaceWithParent=True)
                 except Exception as e:
-                    print(f"Could not merge namespace '{ns}': {e}")
-    
+                    logger.warning(f"Could not merge namespace '{ns}': {e}")
+
     def _query_rig_for_export(self):
         """
         Process all selected rigs in the UI.
@@ -554,46 +560,65 @@ class MayaRigHandler(QtWidgets.QDialog):
             connections = cmds.listConnections(skl_layer, type="joint") or []
             if connections:
                 root_joint = connections[0]
-                print(f"Root SKL joint from connections for '{rig_name}': {root_joint}")
+                logger.debug(
+                    f"Root SKL joint from connections for '{rig_name}': {root_joint}"
+                )
         else:
-            print(f"Warning: '{skl_layer}' not found for rig '{rig_name}'")
+            logger.debug(f"'{skl_layer}' not found for rig '{rig_name}'")
 
             # Try to find the skeleton group
             skeleton_node = f"{rig_name}_Skeleton"
             if cmds.objExists(skeleton_node):
-                children = cmds.listRelatives(skeleton_node, children=True, type="joint", fullPath=True) or []
+                children = (
+                    cmds.listRelatives(
+                        skeleton_node, children=True, type="joint", fullPath=True
+                    )
+                    or []
+                )
                 if children:
                     root_joint = children[0]
-                    print(f"Found root joint under '{skeleton_node}' for '{rig_name}': {root_joint}")
+                    logger.debug(
+                        f"Found root joint under '{skeleton_node}' for '{rig_name}': {root_joint}"
+                    )
             else:
                 # Fallback: look for any joint under the rig hierarchy
-                joints = cmds.listRelatives(rig_name, allDescendents=True, type="joint", fullPath=True) or []
+                joints = (
+                    cmds.listRelatives(
+                        rig_name, allDescendents=True, type="joint", fullPath=True
+                    )
+                    or []
+                )
                 if joints:
                     # Optionally, reverse to bias toward roots if Maya returns leaves first
                     joints.reverse()
                     for jnt in joints:
                         if not cmds.listRelatives(jnt, parent=True, type="joint"):
                             root_joint = jnt
-                            print(f"Fallback root joint found for '{rig_name}': {root_joint}")
+                            logger.debug(
+                                f"Fallback root joint found for '{rig_name}': {root_joint}"
+                            )
                             break
 
         if root_joint:
             self.skl_sel = [root_joint]
         else:
-            print(f"Warning: No root joint found for '{rig_name}'")
+            logger.warning(f"No root joint found for '{rig_name}'")
 
         # Process geometry layer
         if cmds.objExists(geo_layer):
             connections = cmds.listConnections(geo_layer) or []
             self.geo_sel = connections[1:] if len(connections) > 1 else []
-            print(f"GEO for {rig_name}:", self.geo_sel)
+            logger.debug(f"GEO for {rig_name}: {self.geo_sel}")
         else:
-            print(f"Warning: '{geo_layer}' not found for rig '{rig_name}'")
+            logger.debug(f"'{geo_layer}' not found for rig '{rig_name}'")
 
             # Try to find geometry under ExportMeshes first
             export_node = f"{rig_name}_Meshes_ExportMeshes"
             if cmds.objExists(export_node):
-                potential_geo = cmds.listRelatives(export_node, allDescendents=True, type="mesh") or []
+                potential_geo = (
+                    cmds.listRelatives(export_node, allDescendents=True, type="mesh")
+                    or []
+                )
                 if potential_geo:
                     geo_transforms = []
                     for geo in potential_geo:
@@ -601,10 +626,14 @@ class MayaRigHandler(QtWidgets.QDialog):
                         if parents:
                             geo_transforms.append(parents[0])
                     self.geo_sel = list(set(geo_transforms))  # Remove duplicates
-                    print(f"Found {len(self.geo_sel)} geometry parts under ExportMeshes for '{rig_name}'")
+                    logger.debug(
+                        f"Found {len(self.geo_sel)} geometry parts under ExportMeshes for '{rig_name}'"
+                    )
             else:
                 # Fallback: find all meshes under the rig
-                potential_geo = cmds.listRelatives(rig_name, allDescendents=True, type="mesh") or []
+                potential_geo = (
+                    cmds.listRelatives(rig_name, allDescendents=True, type="mesh") or []
+                )
                 if potential_geo:
                     geo_transforms = []
                     for geo in potential_geo:
@@ -612,17 +641,19 @@ class MayaRigHandler(QtWidgets.QDialog):
                         if parents:
                             geo_transforms.append(parents[0])
                     self.geo_sel = list(set(geo_transforms))
-                    print(f"Found {len(self.geo_sel)} geometry parts by hierarchy for '{rig_name}'")
+                    logger.debug(
+                        f"Found {len(self.geo_sel)} geometry parts by hierarchy for '{rig_name}'"
+                    )
 
         # Compile final selection
         self.final_sel = self.geo_sel + self.skl_sel
-        print(f"Complete selection for {rig_name}:", self.final_sel)
+        logger.debug(f"Complete selection for {rig_name}: {self.final_sel}")
 
         if self.final_sel:
             cmds.select(self.final_sel)
             return True
         else:
-            print(f"Warning: No objects found to select for '{rig_name}'")
+            logger.warning(f"No objects found to select for '{rig_name}'")
             return False
 
     def _refresh_create_rig_list(self):
@@ -710,11 +741,6 @@ def main(*args):
     except Exception as e:
 
         cmds.warning(f"Error closing existing widget: {e}")
-
-    try:
-        pass
-    except:
-        pass
 
     # Create and show the UI
     ui = MayaRigHandler()

@@ -30,7 +30,7 @@ class FootOps_ReverseFoot(object):
         mc.separator(height=20)
 
         self.name = mc.textFieldGrp(label="Side:")
-        self.export_bn = mc.button(label="Export", command=self.exportStuff)
+        self.export_bn = mc.button(label="Export", command=self.createGuides)
         mc.setParent("..")
 
         # display new window

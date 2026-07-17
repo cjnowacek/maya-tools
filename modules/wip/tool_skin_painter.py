@@ -1,9 +1,6 @@
 import maya.cmds as mc
 import maya.mel as mel
 
-def main():
-    AnimOps_Macros()
-
 
 class main(object):
 
@@ -288,8 +285,7 @@ class main(object):
 
         mel.eval("SelectAllNURBSCurves;")
 
-        mel.eval(
-            """string $ctrlName[] = `ls -sl`;
+        mel.eval("""string $ctrlName[] = `ls -sl`;
             for ($con in $ctrlName){
             catchQuiet(`setAttr ($con + ".translateX") 0`);
             catchQuiet(`setAttr ($con + ".translateY") 0`);
@@ -301,8 +297,7 @@ class main(object):
             catchQuiet(`setAttr ($con + ".scaleY") 1`);
             catchQuiet(`setAttr ($con + ".scaleZ") 1`);
             }
-            """
-        )
+            """)
 
         mc.select(mesh)
         self.paintToolMenu()
@@ -314,8 +309,7 @@ class main(object):
 
         mel.eval("SelectAllNURBSCurves;")
 
-        mel.eval(
-            """string $ctrlName[] = `ls -sl`;
+        mel.eval("""string $ctrlName[] = `ls -sl`;
             for ($con in $ctrlName){
             catchQuiet(`setAttr ($con + ".translateX") 0`);
             catchQuiet(`setAttr ($con + ".translateY") 0`);
@@ -327,13 +321,9 @@ class main(object):
             catchQuiet(`setAttr ($con + ".scaleY") 1`);
             catchQuiet(`setAttr ($con + ".scaleZ") 1`);
             }
-            """
-        )
+            """)
 
         mc.select(mesh)
 
         mel.eval("MirrorSkinWeightsOptions;")
         mel.eval("performMirrorSkinWeights true;")
-
-
-# myWindow = SkinOps_Painter()

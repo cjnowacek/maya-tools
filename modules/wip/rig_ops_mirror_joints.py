@@ -1,10 +1,12 @@
+import logging
 import maya.cmds as mc
-import maya.mel as mel
-from maya import OpenMaya as om
-from maya import OpenMayaUI as omui
+
+logger = logging.getLogger(__name__)
+
 
 def main():
     MirrorJoints()
+
 
 def MirrorJoints(mirrorbehaviour=True):
     selList = []
@@ -15,7 +17,7 @@ def MirrorJoints(mirrorbehaviour=True):
     selList.append(selchildren)
 
     for each in range(len(selList)):
-        print(selList[each])
+        logger.debug(selList[each])
 
     mc.select(cl=1)
     mirrorjnt = mc.joint(n="mirror_joint", p=[0, 0, 0])

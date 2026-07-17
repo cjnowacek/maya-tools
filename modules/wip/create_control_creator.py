@@ -6,8 +6,10 @@ Description: UI for creating controls at a position
 """
 
 import maya.cmds as mc
-import maya.mel as mel
-import os
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 # TODO add different export types
 # TODO add options for animation?
@@ -65,7 +67,7 @@ class ControlCreator(object):
             mc.parent(off, grp)
             const = mc.parentConstraint(sel[i], grp, mo=False)
             mc.delete(const)
-            print(sel)
+            logger.debug(sel)
             mc.parent(sel[i], off)
 
             if mc.objExists("CON_controls"):
@@ -105,4 +107,3 @@ class ControlCreator(object):
 # Main function to run the tool
 def main(*args):
     dialog = ControlCreator()
-    dialog.show()

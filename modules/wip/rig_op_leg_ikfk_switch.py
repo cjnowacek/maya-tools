@@ -13,15 +13,14 @@ Auto Roll Joints
 #-------------------------------------------------------------#
 """
 
-
 import maya.cmds as mc
-import maya.mel as mel
 from maya import OpenMaya as om
-from maya import OpenMayaUI as omui
+
 
 def main():
     RigOps_LegIKFKSwitch()
-    
+
+
 rigType = "Leg"
 side = ""
 controlerSize = 6
@@ -444,7 +443,7 @@ def RigOps_LegIKFKSwitch(side="L"):
     mc.addAttr(
         "{}_Leg_PV_CON".format(side), ln="SpaceSwitch", at="enum", en="world:leg:pelvis"
     )
-    mc.setAttr("{}_Leg_PV_CON.SpaceSwitch".format(side), e=1, k=1)
+    mc.setAttr("{}_Leg_PV_CON.SpaceSwitch".format(side), keyable=True)
 
     # Visiblity connections
 

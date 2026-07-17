@@ -1,8 +1,10 @@
 import maya.cmds as cmds
 import maya.mel as mel
 
-def main(loader_input):
+
+def main(loader_input=""):
     BfaOps_AnimExportPrep(loader_input)
+
 
 def BfaOps_AnimExportPrep(loader_input):
     """Prepares the animation for export by merging namespaces and importing references.
@@ -45,6 +47,7 @@ def BfaOps_AnimExportPrep(loader_input):
     # Select the 'Root' object and its hierarchy
     if cmds.objExists("Root"):
         cmds.select("Root", hierarchy=True)
+
 
 # Example usage from another script
 if __name__ == "__main__":

@@ -26,27 +26,24 @@ It includes tools for joint creation, orientation, axis visibility, renaming, an
 # ------------------------------
 # Imports
 # ------------------------------
+import logging
 import maya.cmds as cmds
 import maya.OpenMayaUI as omui
 from maya.app.general.mayaMixin import MayaQWidgetDockableMixin
 from shiboken2 import wrapInstance
 from PySide2.QtCore import Qt
 from PySide2.QtWidgets import (
-    QApplication,
     QWidget,
     QPushButton,
-    QCheckBox,
     QLineEdit,
     QSlider,
     QRadioButton,
-    QButtonGroup,
     QHBoxLayout,
     QVBoxLayout,
     QGroupBox,
     QLabel,
     QComboBox,
     QSpinBox,
-    QSizePolicy,
     QTabWidget,
     QMenuBar,
     QMenu,
@@ -54,15 +51,16 @@ from PySide2.QtWidgets import (
 
 
 from modules.Rig.Lib import joint_tools as jt
-from modules.Rig.Lib import rig_compiler as rc
+
+logger = logging.getLogger(__name__)
 
 
 # ------------------------------
 # Utility Functions
 # ------------------------------
 def print_widget_name(widget_name):
-    """Helper function to print the name of interacted widgets."""
-    print(f"Widget '{widget_name}' was interacted with.")
+    """Helper to log the name of interacted widgets."""
+    logger.debug(f"Widget '{widget_name}' was interacted with.")
 
 
 def get_maya_main_window():
@@ -151,13 +149,13 @@ class QuickToolsWindow(MayaQWidgetDockableMixin, QWidget):
     # Menu Actions
     # ------------------------------
     def new_action(self):
-        print("New File Created")
+        logger.debug("New File Created")
 
     def open_action(self):
-        print("Open File Dialog Triggered")
+        logger.debug("Open File Dialog Triggered")
 
     def save_action(self):
-        print("Save File Dialog Triggered")
+        logger.debug("Save File Dialog Triggered")
 
     def unrealcontrolrig_action(self):
         from modules.Rig.Lib import unreal_auto_rig as bUR
@@ -165,16 +163,16 @@ class QuickToolsWindow(MayaQWidgetDockableMixin, QWidget):
         bUR.BuildUnrealRig()
 
     def redo_action(self):
-        print("Redo Action")
+        logger.debug("Redo Action")
 
     def about_action(self):
-        print("About Dialog Triggered")
+        logger.debug("About Dialog Triggered")
 
     def export_fbx_action(self):
-        print("Exporting as FBX...")
+        logger.debug("Exporting as FBX...")
 
     def export_obj_action(self):
-        print("Exporting as OBJ...")
+        logger.debug("Exporting as OBJ...")
 
     # ------------------------------
     # First Tab (Quick Tools)
@@ -334,18 +332,24 @@ class QuickToolsWindow(MayaQWidgetDockableMixin, QWidget):
         # Path input
         layout1 = QHBoxLayout()
         rig_path = QLineEdit("")
-        rig_path.setPlaceholderText("Path to Rig Directory (leave empty to use default)")
+        rig_path.setPlaceholderText(
+            "Path to Rig Directory (leave empty to use default)"
+        )
         layout1.addWidget(rig_path)
 
         # Action buttons
         layout = QHBoxLayout()
         compile_btn = QPushButton("Compile")
         decompile_btn = QPushButton("Decompile")
-        
+
         # Connect buttons with lambda functions to pass the current text value
-        compile_btn.clicked.connect(lambda: self.handle_compile(rig_path.text(), "compile"))
-        decompile_btn.clicked.connect(lambda: self.handle_compile(rig_path.text(), "decompile"))
-        
+        compile_btn.clicked.connect(
+            lambda: self.handle_compile(rig_path.text(), "compile")
+        )
+        decompile_btn.clicked.connect(
+            lambda: self.handle_compile(rig_path.text(), "decompile")
+        )
+
         layout.addWidget(compile_btn)
         layout.addWidget(decompile_btn)
 
@@ -360,26 +364,28 @@ class QuickToolsWindow(MayaQWidgetDockableMixin, QWidget):
                     title="Save Required",
                     message="Please save your Maya scene before compiling or decompiling.",
                     button=["OK"],
-                    defaultButton="OK"
+                    defaultButton="OK",
                 )
                 return
-                
+
             # Call the rig_compiler function with proper parameters
             from modules.Rig.Lib import rig_compiler as rc
+
             rc.run(path, operation)
         except Exception as e:
             import traceback
+
             error_msg = str(e)
             tb = traceback.format_exc()
             cmds.warning(f"Error during {operation}: {error_msg}")
-            print(f"Traceback: {tb}")
+            logger.error(f"Traceback: {tb}")
 
             # Show a more user-friendly error dialog
             cmds.confirmDialog(
                 title="Operation Failed",
                 message=f"The {operation} operation failed: {error_msg}",
                 button=["OK"],
-                defaultButton="OK"
+                defaultButton="OK",
             )
 
 
@@ -397,7 +403,7 @@ def show_dockable_widget():
             tm_tab_window = None
 
     except Exception as e:
-        print(f"Error deleting UI: {e}")
+        logger.warning(f"Error deleting UI: {e}")
 
     tm_tab_window = QuickToolsWindow()
     tm_tab_window.show()
