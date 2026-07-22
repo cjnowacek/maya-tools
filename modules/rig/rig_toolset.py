@@ -50,7 +50,7 @@ from PySide2.QtWidgets import (
 )
 
 
-from modules.Rig.Lib import joint_tools as jt
+from modules.rig.Lib import joint_tools as jt
 
 logger = logging.getLogger(__name__)
 
@@ -158,7 +158,7 @@ class QuickToolsWindow(MayaQWidgetDockableMixin, QWidget):
         logger.debug("Save File Dialog Triggered")
 
     def unrealcontrolrig_action(self):
-        from modules.Rig.Lib import unreal_auto_rig as bUR
+        from modules.rig.Lib import unreal_auto_rig as bUR
 
         bUR.BuildUnrealRig()
 
@@ -369,7 +369,7 @@ class QuickToolsWindow(MayaQWidgetDockableMixin, QWidget):
                 return
 
             # Call the rig_compiler function with proper parameters
-            from modules.Rig.Lib import rig_compiler as rc
+            from modules.rig.Lib import rig_compiler as rc
 
             rc.run(path, operation)
         except Exception as e:

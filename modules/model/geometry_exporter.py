@@ -29,7 +29,7 @@ import maya.cmds as mc
 import os
 
 
-def main():
+def main(*args):
     """Launch the ToolOps Batch Geometry Exporter UI."""
     ToolOpsBatchGeoExporter()
 

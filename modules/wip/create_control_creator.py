@@ -46,6 +46,9 @@ class ControlCreator(object):
     def MirrorControl(self):
 
         sel = mc.ls(sl=1)
+        if not sel:
+            mc.warning("Select a control to mirror.")
+            return
         this = mc.createNode("transform", n="mirror group")
         newcon = mc.duplicate(sel, n=sel[0].replace("L_", "R_"))
         mc.parent(newcon, this)
@@ -58,6 +61,9 @@ class ControlCreator(object):
     def finalizeControl(self):
 
         sel = mc.ls(sl=1)
+        if not sel:
+            mc.warning("Select controls to finalize.")
+            return
 
         for i in range(len(sel)):
 

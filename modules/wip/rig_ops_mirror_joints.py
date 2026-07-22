@@ -1,35 +1,46 @@
+"""Mirror the selected joint chain across the YZ plane with mirror behavior,
+swapping side name tokens (repo convention: L_ / R_ prefixes).
+"""
+
 import logging
+
 import maya.cmds as mc
 
 logger = logging.getLogger(__name__)
 
 
-def main():
-    MirrorJoints()
+def main(search="L_", replace="R_", *args):
+    mirror_joints(search or "L_", replace or "R_")
 
 
-def MirrorJoints(mirrorbehaviour=True):
-    selList = []
+def mirror_joints(search="L_", replace="R_"):
+    sel = mc.ls(sl=True, type="joint")
+    if not sel:
+        mc.warning("Select the root joint of the chain to mirror.")
+        return None
 
-    sel = mc.ls(sl=1)
-    selchildren = mc.listRelatives(sel, ad=True)
-    selList.append(sel)
-    selList.append(selchildren)
+    root = sel[0]
+    original_parent = mc.listRelatives(root, parent=True)
 
-    for each in range(len(selList)):
-        logger.debug(selList[each])
+    # Mirror around a temp joint at the origin so the chain flips about YZ
+    mc.select(cl=True)
+    tmp = mc.joint(n="mirror_tmp_JNT", p=[0, 0, 0])
+    mc.parent(root, tmp)
+    mirrored = mc.mirrorJoint(
+        tmp, mirrorBehavior=True, mirrorYZ=True, searchReplace=(search, replace)
+    )
 
-    mc.select(cl=1)
-    mirrorjnt = mc.joint(n="mirror_joint", p=[0, 0, 0])
+    new_joints = mc.listRelatives(mirrored[0], children=True) or []
+    if new_joints:
+        new_joints = mc.parent(new_joints, world=True)
+    mc.delete(mirrored[0])
 
-    mc.parent(sel[:], mirrorjnt)
-    mc.mirrorJoint(mirrorjnt, mb=mirrorbehaviour, mirrorYZ=True, sr=("_l", "_r"))
-    topjoint = mc.ls(sl=1)
-    newjoints = mc.listRelatives(children=True)
+    if original_parent:
+        mc.parent(root, original_parent[0])
+    else:
+        mc.parent(root, world=True)
+    mc.delete(tmp)
 
-    mc.parent(newjoints, w=1)
-    mc.delete(topjoint)
-
-    mc.select(mirrorjnt)
-    mc.parent(sel[:], w=1)
-    mc.delete("mirror_joint")
+    mc.select(new_joints)
+    logger.debug("Mirrored %s -> %s", root, new_joints)
+    return new_joints

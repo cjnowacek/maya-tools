@@ -2,7 +2,11 @@ import maya.cmds as mc
 import maya.mel as mel
 
 
-class main(object):
+def main(*args):
+    return SkinPainter()
+
+
+class SkinPainter(object):
 
     # constructor
     def __init__(self):

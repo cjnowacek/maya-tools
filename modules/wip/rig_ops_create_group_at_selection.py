@@ -1,24 +1,38 @@
+"""Insert a zeroed parent group above each selected object.
+
+Each group matches the object's world transform, so the object's local
+values read zero afterward. Existing parents are preserved.
+"""
+
+import logging
+
 import maya.cmds as cmds
 
-
-# create group that matches location of a given object
-def main():
-    RigOps_createGroupatSelection()
+logger = logging.getLogger(__name__)
 
 
-class RigOps_createGroupatSelection(object):
+def main(*args):
+    create_group_at_selection()
 
-    def __init__(self):
-        sel = cmds.ls(sl=1)
-        selXform = cmds.xform(sel, ws=True, q=True, m=True)
 
-        GRP = cmds.createNode("transform", name=str(sel[0]) + "_GRP")
-        cmds.xform(GRP, m=selXform)
+def create_group_at_selection():
+    sel = cmds.ls(sl=True)
+    if not sel:
+        cmds.warning("Select at least one object to group.")
+        return None
 
-        if cmds.listRelatives(sel, p=True):
-            cmds.select(sel)
-            target = cmds.pickWalk(d="UP")
-            cmds.parent(GRP, target)
-            cmds.parent(sel, GRP)
-        else:
-            cmds.parent(sel, GRP)
+    groups = []
+    for node in sel:
+        xform = cmds.xform(node, ws=True, q=True, m=True)
+        grp = cmds.createNode("transform", name="{}_GRP".format(node))
+        cmds.xform(grp, m=xform)
+
+        parent = cmds.listRelatives(node, parent=True)
+        if parent:
+            cmds.parent(grp, parent[0])
+        cmds.parent(node, grp)
+        groups.append(grp)
+        logger.debug("Inserted %s above %s", grp, node)
+
+    cmds.select(groups)
+    return groups

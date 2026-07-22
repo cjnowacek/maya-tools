@@ -1,35 +1,34 @@
-import maya.cmds as cmds
+"""Create a locator (with a joint parented under it) at the selected object's
+position. Useful for placing guide points that carry an orientable joint.
+"""
 
 import logging
+
+import maya.cmds as cmds
 
 logger = logging.getLogger(__name__)
 
 
-def create_JNT_LOC():
-    # create a jnt and locator at point of selected object
-
-    sel = cmds.ls(sl=1)
-    logger.debug(sel)
-
-    LOC = cmds.spaceLocator(p=(0, 0, 0))
-
-    cmds.select(sel, LOC)
-
-    constLoc = cmds.pointConstraint(sel, LOC, o=(0, 0, 0), w=1)
-    cmds.delete(constLoc)
-    cmds.select(cl=1)
-
-    JNT = cmds.joint(p=(0, 0, 0))
-
-    constJNT = cmds.pointConstraint(LOC, JNT, o=(0, 0, 0), w=1)
-    cmds.delete(constJNT)
-    cmds.parent(JNT, LOC)
-    cmds.select(LOC)
-
-
 def main(*args):
-    create_JNT_LOC()
+    create_jnt_loc()
 
 
-if __name__ == "__main__":
-    main()
+def create_jnt_loc():
+    sel = cmds.ls(sl=True)
+    if not sel:
+        cmds.warning("Select an object to place a joint and locator at.")
+        return None
+
+    loc = cmds.spaceLocator(p=(0, 0, 0))
+    const = cmds.pointConstraint(sel, loc, offset=(0, 0, 0), weight=1)
+    cmds.delete(const)
+
+    cmds.select(cl=True)
+    jnt = cmds.joint(p=(0, 0, 0))
+    const = cmds.pointConstraint(loc, jnt, offset=(0, 0, 0), weight=1)
+    cmds.delete(const)
+    cmds.parent(jnt, loc)
+
+    cmds.select(loc)
+    logger.debug("Created %s with %s at %s", loc, jnt, sel)
+    return loc, jnt

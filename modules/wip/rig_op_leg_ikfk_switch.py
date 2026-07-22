@@ -17,8 +17,8 @@ import maya.cmds as mc
 from maya import OpenMaya as om
 
 
-def main():
-    RigOps_LegIKFKSwitch()
+def main(side="L", *args):
+    RigOps_LegIKFKSwitch(side or "L")
 
 
 rigType = "Leg"
@@ -27,6 +27,13 @@ controlerSize = 6
 
 
 def RigOps_LegIKFKSwitch(side="L"):
+    required = [
+        "{}_{}_BN_JNT".format(side, part) for part in ("Thigh", "Calf", "Ankle")
+    ]
+    missing = [jnt for jnt in required if not mc.objExists(jnt)]
+    if missing:
+        mc.error("Missing bind joints: {}".format(", ".join(missing)))
+
     rigGroup = mc.group(em=True, n="{}_Leg_Grp".format(side))
     name = side + rigType
 
@@ -326,15 +333,10 @@ def RigOps_LegIKFKSwitch(side="L"):
     arm_attributes_asset = mc.container(n="{}_Leg_ASSET".format(side))
     mc.container(arm_attributes_asset, e=True, ish=True, f=True, an=ikfk_attributes_Grp)
 
-    IKFK_reverse = mc.createNode("reverse", n="{}_Leg_IKFK_reverse".format(side))
-
-    # Connect attribute to the reverse
-    mc.connectAttr(ikfk_attributes_Grp + ".IKFK_Switch", IKFK_reverse + ".input.inputX")
-
-    # Connect the reverse to the blend color nodes
-    mc.connectAttr(IKFK_reverse + ".input.inputX", root_blend_color + ".blender")
-    mc.connectAttr(IKFK_reverse + ".input.inputX", mid_blend_color + ".blender")
-    mc.connectAttr(IKFK_reverse + ".input.inputX", end_blend_color + ".blender")
+    # Switch convention: 0 = IK (blendColors color2), 1 = FK (color1)
+    mc.connectAttr(ikfk_attributes_Grp + ".IKFK_Switch", root_blend_color + ".blender")
+    mc.connectAttr(ikfk_attributes_Grp + ".IKFK_Switch", mid_blend_color + ".blender")
+    mc.connectAttr(ikfk_attributes_Grp + ".IKFK_Switch", end_blend_color + ".blender")
 
     # Add controls to the asset
 
@@ -440,10 +442,48 @@ def RigOps_LegIKFKSwitch(side="L"):
     get_pole_vec_pos(root_joint_pos, mid_joint_pos, end_joint_pos)
     if bool(mc.objExists("Pelvis_CON")):
         mc.parentConstraint("Pelvis_CON", rigGroup, mo=1)
-    mc.addAttr(
-        "{}_Leg_PV_CON".format(side), ln="SpaceSwitch", at="enum", en="world:leg:pelvis"
-    )
-    mc.setAttr("{}_Leg_PV_CON.SpaceSwitch".format(side), keyable=True)
+
+    # PV space switch: enum drives constraint weights via condition nodes
+    pv_con = "{}_Leg_PV_CON".format(side)
+    pv_grp = "{}_Leg_PV_Grp".format(side)
+    mc.addAttr(pv_con, ln="SpaceSwitch", at="enum", en="world:leg:pelvis", k=True)
+
+    space_targets = []
+    for label, target_parent in (
+        ("World", ""),
+        ("Leg", IKR_ankle_control),
+        ("Pelvis", "Pelvis_CON"),
+    ):
+        if target_parent and not mc.objExists(target_parent):
+            space_targets.append(None)
+            continue
+        loc = mc.spaceLocator(n="{}_Leg_PV_{}Space_LOC".format(side, label))[0]
+        mc.delete(mc.parentConstraint(pv_grp, loc, mo=False))
+        if target_parent:
+            mc.parent(loc, target_parent)
+        mc.setAttr(loc + ".visibility", 0)
+        space_targets.append(loc)
+
+    live_targets = [t for t in space_targets if t]
+    space_const = mc.parentConstraint(live_targets, pv_grp, mo=True)[0]
+    weight_aliases = mc.parentConstraint(space_const, q=True, weightAliasList=True)
+
+    weight_index = 0
+    for enum_index, target in enumerate(space_targets):
+        if not target:
+            continue
+        cond = mc.createNode(
+            "condition", n="{}_Leg_PV_Space{}_COND".format(side, enum_index)
+        )
+        mc.connectAttr(pv_con + ".SpaceSwitch", cond + ".firstTerm")
+        mc.setAttr(cond + ".secondTerm", enum_index)
+        mc.setAttr(cond + ".colorIfTrueR", 1)
+        mc.setAttr(cond + ".colorIfFalseR", 0)
+        mc.connectAttr(
+            cond + ".outColorR",
+            "{}.{}".format(space_const, weight_aliases[weight_index]),
+        )
+        weight_index += 1
 
     # Visiblity connections
 

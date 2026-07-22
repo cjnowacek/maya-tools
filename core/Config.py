@@ -15,12 +15,14 @@ class Config:
     ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
     # Tool categories and their directories
+    # Keys must match the on-disk folder casing exactly; Windows tolerates
+    # mismatches but Linux/macOS do not
     TOOL_PATHS = {
-        "model": os.path.join(ROOT_DIR, "modules", "Model"),
-        "rig": os.path.join(ROOT_DIR, "modules", "Rig"),
-        "anim": os.path.join(ROOT_DIR, "modules", "Anim"),
-        "scene": os.path.join(ROOT_DIR, "modules", "Scene"),
-        "wip": os.path.join(ROOT_DIR, "modules", "Wip"),
+        "model": os.path.join(ROOT_DIR, "modules", "model"),
+        "rig": os.path.join(ROOT_DIR, "modules", "rig"),
+        "anim": os.path.join(ROOT_DIR, "modules", "anim"),
+        "scene": os.path.join(ROOT_DIR, "modules", "scene"),
+        "wip": os.path.join(ROOT_DIR, "modules", "wip"),
     }
 
     # UI settings

@@ -1,121 +1,76 @@
-from maya import cmds as mc
+"""Build guide locators for a biped: spine, arm, and leg chains.
+
+Creates a "Guides" group with named locator hierarchies matching the repo
+naming convention ({side}_Name_BN). Positions are rough biped defaults in
+centimeters; move the guides to fit the character, then build joints from
+them (see tool_ops_create_jnt_loc_at_point).
+"""
+
+import logging
+
+import maya.cmds as mc
+
+logger = logging.getLogger(__name__)
+
+SPINE_GUIDES = [
+    ("Pelvis_BN", (0, 95, 0)),
+    ("Spine1_BN", (0, 105, 0)),
+    ("Spine2_BN", (0, 115, 0)),
+    ("Spine3_BN", (0, 125, 0)),
+    ("Chest_BN", (0, 135, 0)),
+]
+
+ARM_GUIDES = [
+    ("Clavicle_BN", (4, 142, 2)),
+    ("Shoulder_BN", (16, 142, 0)),
+    ("Elbow_BN", (42, 142, -4)),
+    ("Wrist_BN", (68, 142, 0)),
+]
+
+LEG_GUIDES = [
+    ("Thigh_BN", (10, 92, 0)),
+    ("Calf_BN", (10, 50, 4)),
+    ("Ankle_BN", (10, 10, 0)),
+    ("Ball_BN", (10, 2, 12)),
+    ("Toe_BN", (10, 2, 20)),
+]
 
 
-def main():
-    mainBodyLocs = spineLoc()
-    arm = armLocs()
-    leg = legLocs()
+def main(side="L", *args):
+    build_guides(side or "L")
 
 
-# main body
-class RigOps_mainBodyLocs(object):
-
-    # constructor
-    def __init__(self):
-
-        self.transform_group = mc.createNode("transform", name="Locs")
-
-        self.spineLocList = []
-        self.root_Name = "Root"
-
-
-# _________________________________________________________________#
-
-
-# build spineLocs
-class spineLoc(object):
-
-    # constructor
-    def __init__(self):
-        self.spineLocList = []
-        self.pelvis_Name = "Pelvis_BN"
-        self.spine1_Name = "Spine1_BN"
-        self.spine2_Name = "Spine2_BN"
-        self.spine3_Name = "Spine3_BN"
-        self.chest_Name = "Chest_BN"
-
-    def build(self):
-        self.PelvisLoc = mc.spaceLocator(n=self.pelvis_Name, p=(0, 0, 0))[0]
-        self.Spine1Loc = mc.spaceLocator(n=self.spine1_Name, p=(0, 0, 1))[0]
-        self.Spine2Loc = mc.spaceLocator(n=self.spine2_Name, p=(0, 0, 2))[0]
-        self.Spine3Loc = mc.spaceLocator(n=self.spine3_Name, p=(0, 0, 3))[0]
-        self.ChestLoc = mc.spaceLocator(n=self.chest_Name, p=(0, 0, 4))[0]
-        self.appendspineLocs()
-
-        mc.parent(self.ChestLoc, self.Spine3Loc)
-        mc.parent(self.Spine3Loc, self.Spine2Loc)
-        mc.parent(self.Spine2Loc, self.Spine1Loc)
-        mc.parent(self.Spine1Loc, self.PelvisLoc)
-
-        self.transform_group = mc.createNode("transform", name="Spine_Group")
-
-        mc.parent(self.PelvisLoc, self.transform_group)
-
-        mc.select(self.transform_group)
-
-    def appendspineLocs(self):
-
-        if self.PelvisLoc not in self.spineLocList:
-            self.spineLocList.append(self.PelvisLoc)
-        if self.Spine1Loc not in self.spineLocList:
-            self.spineLocList.append(self.Spine1Loc)
-        if self.Spine2Loc not in self.spineLocList:
-            self.spineLocList.append(self.Spine2Loc)
-        if self.Spine3Loc not in self.spineLocList:
-            self.spineLocList.append(self.Spine3Loc)
-        if self.ChestLoc not in self.spineLocList:
-            self.spineLocList.append(self.ChestLoc)
+def _build_chain(guides, parent_group, prefix="", mirror=False):
+    previous = None
+    top = None
+    for name, pos in guides:
+        loc = mc.spaceLocator(n=prefix + name)[0]
+        x = -pos[0] if mirror else pos[0]
+        mc.xform(loc, ws=True, t=(x, pos[1], pos[2]))
+        if previous:
+            mc.parent(loc, previous)
+        else:
+            top = loc
+        previous = loc
+    mc.parent(top, parent_group)
+    return top
 
 
-class RigOps_spineSkl(object):
-    pass
+def build_guides(side="L"):
+    if mc.objExists("Guides"):
+        top = "Guides"
+    else:
+        top = mc.createNode("transform", name="Guides")
 
+    mirror = side.upper().startswith("R")
+    prefix = "{}_".format(side.upper()[0])
 
-class RigOps_spineRig(object):
-    pass
+    made = []
+    if not mc.objExists("Pelvis_BN"):
+        made.append(_build_chain(SPINE_GUIDES, top))
+    made.append(_build_chain(ARM_GUIDES, top, prefix=prefix, mirror=mirror))
+    made.append(_build_chain(LEG_GUIDES, top, prefix=prefix, mirror=mirror))
 
-
-# _________________________________________________________________#
-
-
-# build armLocs
-class armLocs(object):
-
-    def __init__(self):
-        self.spineLocList = []
-        self.pelvis_Name = "Pelvis_BN"
-        self.spine1_Name = "Spine1_BN"
-        self.spine2_Name = "Spine2_BN"
-        self.spine3_Name = "Spine3_BN"
-        self.chest_Name = "Chest_BN"
-
-
-class RigOps_armSkl(object):
-    pass
-
-
-class RigOps_armRig(object):
-    pass
-
-
-# _________________________________________________________________#
-
-
-# build legLocs
-class legLocs(object):
-
-    def __init__(self):
-        self.spineLocList = []
-        self.pelvis_Name = "Pelvis_BN"
-        self.spine1_Name = "Spine1_BN"
-        self.spine2_Name = "Spine2_BN"
-        self.spine3_Name = "Spine3_BN"
-        self.chest_Name = "Chest_BN"
-
-
-class RigOps_legSkl(object):
-    pass
-
-
-class RigOps_legRig(object):
-    pass
+    mc.select(top)
+    logger.debug("Built guides: %s", made)
+    return made

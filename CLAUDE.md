@@ -16,7 +16,7 @@ exec(open(r"C:\path\to\toolset_launcher.py").read())
 
 `toolset_launcher.py` bootstraps `sys.path` (project root + `core/` + `modules/`), force-reloads any already-imported `core`/`modules`/`tools` submodules (so edits take effect without restarting Maya), then imports `core.toolset_master` and calls `show_ui()`.
 
-When running from the Script Editor, `__file__` is undefined, so the launcher falls back to the **hardcoded path at `toolset_launcher.py:15`** — update it to your checkout location.
+When running from the Script Editor, `__file__` is undefined, so the launcher falls back to the **`MAYA_TOOLS_ROOT` environment variable** — set it to your checkout location (the launcher raises a clear error if it's unset).
 
 ## Architecture
 
@@ -31,11 +31,10 @@ core/
 modules/
   rig/                     # Production rigging tools
     Lib/                   # Library modules imported BY rig tools (not run via the UI)
-  anim/                    # Animation export/prep tools (+ anim/bak/ for dead code)
+  anim/                    # Animation export/prep tools
   model/                   # Geometry creation/export tools
-  Scene/                   # Scene-wide utilities
+  scene/                   # Scene-wide utilities
   wip/                     # Experimental tools (shown last in the UI)
-  ThirdParty/              # Third-party helpers (zbw_control_shapes.py, cometJointOrient.mel)
 ```
 
 ### The `main(*args)` contract
@@ -80,10 +79,9 @@ Rigs are detected **by name pattern, not node type or attribute**: `_find_rigs()
 
 ## Key Conventions & Gotchas
 
-- **Case-sensitivity mismatch (important):** `Config.TOOL_PATHS` and intra-package imports use **PascalCase** package names (`modules/Rig`, `modules/Model`, `from modules.Rig.Lib import joint_tools`), but the directories on disk are **lowercase** (`modules/rig`, `modules/model`). This works on Windows/macOS (case-insensitive filesystems, where Maya runs) but **breaks on case-sensitive Linux**. When editing imports or `TOOL_PATHS`, preserve the existing PascalCase spellings rather than "fixing" them to match the lowercase dirs — and be aware static checks on Linux may fail to resolve these.
-- **Lib imports go through the package path** `from modules.Rig.Lib import ...` and `from core.Config import Config`, which only resolve because the launcher put the project root on `sys.path`.
-- **Hardcoded paths need updating before use:** the launcher fallback (`toolset_launcher.py:15`) and FBX export output in `character_rig_handler._export_rig()` (`C:/dropbox/your_file.fbx`) are placeholders. FBX export settings there are hardcoded MEL `FBXExport*` calls.
+- **Casing is standardized lowercase** for module directories, `Config.TOOL_PATHS`, and intra-package imports (`from modules.rig.Lib import joint_tools`); `Lib/` keeps its capital L. Match on-disk casing exactly in any new imports or `TOOL_PATHS` entries so the code stays portable to case-sensitive filesystems.
+- **Lib imports go through the package path** `from modules.rig.Lib import ...` and `from core.Config import Config`, which only resolve because the launcher put the project root on `sys.path`.
+- **Hardcoded path needs updating before use:** FBX export output in `character_rig_handler._export_rig()` (`C:/dropbox/your_file.fbx`) is a placeholder. FBX export settings there are hardcoded MEL `FBXExport*` calls.
 - **Code style:** black-style formatting; snake_case filenames and functions. Use a module-level `logger = logging.getLogger(__name__)` for diagnostics rather than `print`, and `cmds.warning(...)` for user-facing warnings in Maya.
 - **WIP tools** (`modules/wip/`) are active-development and show last in the UI; treat them as unstable.
-- `modules/anim/bak/` holds superseded code; don't wire it into anything.
 - No automated tests or CI — verification is manual, inside Maya.

@@ -17,8 +17,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def main():
-    RigOps_ArmIKFKSwitch()
+def main(side="L", *args):
+    RigOps_ArmIKFKSwitch(side or "L")
 
 
 rigType = "Arm"
@@ -35,7 +35,9 @@ def RigOps_ArmIKFKSwitch(side="L"):
     else:
         mc.error('Side must be "L" or "R"')
 
-    sel = mc.ls(sl=True)
+    sel = mc.ls(sl=True, type="joint")
+    if len(sel) < 4:
+        mc.error("Select four joints in order: clavicle, shoulder, elbow, wrist.")
     JointSize = mc.getAttr((sel[0] + ".radius"))
     name = side + "_" + rigType
     rigGroup = mc.group(em=True, n=name + "_Grp")
@@ -262,15 +264,10 @@ def RigOps_ArmIKFKSwitch(side="L"):
     mc.container(arm_attributes_asset, e=True, ish=True, f=True, an=ikfk_attributes_Grp)
     mc.parent(ikfk_attributes_Grp, rigGroup)
 
-    IKFK_reverse = mc.createNode("reverse", n="{}_IKFK_reverse".format(name))
-
-    # Connect attribute to the reverse
-    mc.connectAttr(ikfk_attributes_Grp + ".IKFK_Switch", IKFK_reverse + ".input.inputX")
-
-    # Connect the reverse to the blend color nodes
-    mc.connectAttr(IKFK_reverse + ".input.inputX", root_blend_color + ".blender")
-    mc.connectAttr(IKFK_reverse + ".input.inputX", mid_blend_color + ".blender")
-    mc.connectAttr(IKFK_reverse + ".input.inputX", end_blend_color + ".blender")
+    # Switch convention: 0 = IK (blendColors color2), 1 = FK (color1)
+    mc.connectAttr(ikfk_attributes_Grp + ".IKFK_Switch", root_blend_color + ".blender")
+    mc.connectAttr(ikfk_attributes_Grp + ".IKFK_Switch", mid_blend_color + ".blender")
+    mc.connectAttr(ikfk_attributes_Grp + ".IKFK_Switch", end_blend_color + ".blender")
 
     # Add controls to the asset
 
@@ -378,7 +375,7 @@ def RigOps_ArmIKFKSwitch(side="L"):
     )
 
     mc.connectAttr(ikfk_attributes_Grp + ".IKFK_Switch", arm_condition + ".firstTerm")
-    mc.connectAttr(arm_condition + ".outColor.outColorR", topnode[1] + ".visibility")
+    mc.connectAttr(arm_condition + ".outColor.outColorR", topnode[0] + ".visibility")
     mc.connectAttr(arm_condition + ".outColor.outColorG", IKR_GRP + ".visibility")
 
     mc.setAttr(arm_condition + ".colorIfTrueR", 0)
