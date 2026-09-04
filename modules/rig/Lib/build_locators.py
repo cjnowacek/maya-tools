@@ -2,13 +2,17 @@
 
 Creates a "Guides" group with named locator hierarchies matching the repo
 naming convention ({side}_Name_BN). Positions are rough biped defaults in
-centimeters; move the guides to fit the character, then build joints from
-them (see tool_ops_create_jnt_loc_at_point).
+centimeters.
+
+Library module: run through the Build Biped workflow tool (guides phase),
+not from the toolset UI directly.
 """
 
 import logging
 
 import maya.cmds as mc
+
+from modules.rig.Lib import scene_meta
 
 logger = logging.getLogger(__name__)
 
@@ -36,8 +40,6 @@ LEG_GUIDES = [
 ]
 
 
-def main(side="L", *args):
-    build_guides(side or "L")
 
 
 def _build_chain(guides, parent_group, prefix="", mirror=False):
@@ -71,6 +73,7 @@ def build_guides(side="L"):
     made.append(_build_chain(ARM_GUIDES, top, prefix=prefix, mirror=mirror))
     made.append(_build_chain(LEG_GUIDES, top, prefix=prefix, mirror=mirror))
 
+    scene_meta.record("guides", nodes=[top], info={"side": side})
     mc.select(top)
     logger.debug("Built guides: %s", made)
     return made
