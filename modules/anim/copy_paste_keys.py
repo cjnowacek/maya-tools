@@ -1,5 +1,14 @@
 import maya.cmds as mc
 
+TOOL_META = {
+    "description": (
+        "Move all animation from one object to another.\n\n"
+        "Select the SOURCE object, then the TARGET, and run. Keys are CUT "
+        "from the source (it loses its animation) and pasted onto the "
+        "target, replacing whatever was there."
+    ),
+}
+
 
 def main(*args):
     CopyPasteKeys()

@@ -1,6 +1,14 @@
 import maya.cmds as mc
 import maya.mel as mel
 
+TOOL_META = {
+    "description": (
+        "Skin weight painting palette (opens its own window).\n\n"
+        "Quick access to the Paint Skin Weights tool with preset brush "
+        "settings. WIP."
+    ),
+}
+
 
 def main(*args):
     return SkinPainter()

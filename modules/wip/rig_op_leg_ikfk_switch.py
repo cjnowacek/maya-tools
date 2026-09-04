@@ -17,6 +17,20 @@ import maya.cmds as mc
 from maya import OpenMaya as om
 
 
+TOOL_META = {
+    "description": (
+        'Leg auto-rig: IK/FK switch on top of existing BN joints.\n\n'
+        'Builds IK and FK chains over the bind leg, a blend switch, and '
+        "an auto-placed pole vector. Expects the repo's {side}_Name_BN "
+        'joint naming. Pairs with Rig Op Reverse Foot, which finds this '
+        "build's {side}_Leg_IKR handle."
+    ),
+    "params": {'side': {'label': 'side',
+              'choices': ['L', 'R'],
+              'tooltip': 'Which side of the character to build.'}},
+}
+
+
 def main(side="L", *args):
     RigOps_LegIKFKSwitch(side or "L")
 

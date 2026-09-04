@@ -1,6 +1,22 @@
 import maya.cmds as cmds
 import maya.mel as mel
 
+TOOL_META = {
+    "description": (
+        "Flatten a referenced animation scene for export.\n\n"
+        "Merges the given namespace into root, imports every loaded "
+        "reference (including nested ones), then unparents the children of "
+        "SKL and GEO groups to world so the skeleton and meshes sit at the "
+        "top level, ready for FBX export."
+    ),
+    "params": {
+        "loader_input": {
+            "label": "namespace",
+            "tooltip": "Namespace to merge into root before importing references.",
+        },
+    },
+}
+
 
 def main(loader_input=""):
     BfaOps_AnimExportPrep(loader_input)

@@ -1,6 +1,16 @@
 import maya.cmds as mc
 import maya.mel as mel
 
+TOOL_META = {
+    "description": (
+        "Assume Preferred Angle on a whole joint hierarchy.\n\n"
+        "Select the root joint and run: every joint BELOW the root (the root "
+        "itself is excluded) snaps to its stored preferred angle. Handy for "
+        "restoring a bent rest pose before building IK, or recovering a "
+        "chain after zeroing rotations. Selection is restored afterward."
+    ),
+}
+
 
 def main(*args):
     currentSel = mc.ls(sl=1)

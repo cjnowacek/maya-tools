@@ -15,6 +15,21 @@ SIDE_COLORS = {"L_": 6, "R_": 13}
 CENTER_COLOR = 17
 
 
+TOOL_META = {
+    "description": (
+        "Color the selected controls' shapes by drawing override.\n\n"
+        'With color index 0 the side convention decides: L_ is blue, R_ '
+        'is red, everything else yellow. Pass a Maya color index (1-31) '
+        'to force one color.'
+    ),
+    "params": {'color_index': {'label': 'color index',
+                     'min': 0,
+                     'max': 31,
+                     'tooltip': '0: auto from L_/R_ prefix. 1-31: '
+                                'explicit Maya color index.'}},
+}
+
+
 def main(color_index=0, *args):
     try:
         color_index = int(color_index)

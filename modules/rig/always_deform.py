@@ -1,8 +1,34 @@
+"""Rebind the selected mesh without losing its skin weights.
+
+Select a skinned mesh and run. The tool finds every skin cluster on the mesh,
+exports its weights to JSON (under the project's sourceimages/tmp), unbinds,
+rebinds the same joints with standard settings (classic linear, max 4
+influences, normalized), and re-imports the weights by vertex index.
+
+Use it when a bind has accumulated bad settings or stale influences and you
+want a clean skinCluster with identical deformation. Requires a saved scene
+inside a Maya project (the JSON path is derived from the scenes directory).
+"""
+
 import os
 import logging
 from maya import cmds as mc
 
 logger = logging.getLogger(__name__)
+
+# Read by the toolset UI (core/toolset_master.py): description fills the
+# collapsible panel, params refine the auto-generated input widgets.
+TOOL_META = {
+    "description": (
+        "Rebind the selected mesh without losing its skin weights.\n\n"
+        "Finds every skin cluster on the selected mesh, exports its weights "
+        "to JSON (sourceimages/tmp), unbinds, rebinds the same joints with "
+        "clean settings (classic linear, max 4 influences, normalized), and "
+        "re-imports the weights by vertex index.\n\n"
+        "Requires: a skinned mesh selected, and a saved scene inside a Maya "
+        "project (the JSON path is derived from the scenes directory)."
+    ),
+}
 
 # TODO: Add functionality for multiple meshes
 

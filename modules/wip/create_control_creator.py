@@ -15,6 +15,15 @@ logger = logging.getLogger(__name__)
 # TODO add options for animation?
 
 
+TOOL_META = {
+    "description": (
+        'Control creator UI (opens its own window).\n\n'
+        'Create control curves at the position of selected objects, with '
+        'shape and naming options. WIP.'
+    ),
+}
+
+
 class ControlCreator(object):
 
     # constructor

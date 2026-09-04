@@ -21,6 +21,22 @@ import maya.cmds as mc
 logger = logging.getLogger(__name__)
 
 
+TOOL_META = {
+    "description": (
+        'Reverse-foot setup on an existing leg.\n\n'
+        'Select IN ORDER: ankle joint, ball joint, toe joint, heel guide '
+        '(joint or locator), and optionally the leg ikHandle (otherwise '
+        '{side}_Leg_IKR is used). Builds the reverse pivot hierarchy, SC '
+        'handles for ankle-ball-toe, and a foot control with HeelRoll / '
+        'BallRoll / ToeRoll / ToeSpin / Bank.\n\n'
+        'Assumes the character faces +Z with world-oriented pivots.'
+    ),
+    "params": {'side': {'label': 'side',
+              'choices': ['L', 'R'],
+              'tooltip': 'Which side of the character to build.'}},
+}
+
+
 def main(side="L", *args):
     build_reverse_foot(side or "L")
 

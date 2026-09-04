@@ -12,6 +12,19 @@ import maya.cmds as mc
 logger = logging.getLogger(__name__)
 
 
+TOOL_META = {
+    "description": (
+        'Build an FK circle-control chain over the selected joints.\n\n'
+        'Select the joints in chain order, root first. Each joint whose '
+        'name contains the token gets a CON circle with a zeroed GRP, '
+        'parented under the previous control to form the FK chain.'
+    ),
+    "params": {'name_token': {'label': 'name token',
+                    'tooltip': 'Only joints whose name contains this '
+                               'get controls.'}},
+}
+
+
 def main(name_token="JNT", *args):
     create_fk_controls(name_token or "JNT")
 

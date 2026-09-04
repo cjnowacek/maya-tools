@@ -29,6 +29,16 @@ import maya.cmds as mc
 import os
 
 
+TOOL_META = {
+    "description": (
+        'Batch geometry exporter (opens its own window).\n\n'
+        'Export the selected meshes as OBJ, FBX, or STL files to a chosen '
+        'path, one file per mesh. Flags STL naming issues and preserves '
+        'parent/child relationships while exporting.'
+    ),
+}
+
+
 def main(*args):
     """Launch the ToolOps Batch Geometry Exporter UI."""
     ToolOpsBatchGeoExporter()

@@ -20,6 +20,21 @@ import maya.cmds as mc
 logger = logging.getLogger(__name__)
 
 
+TOOL_META = {
+    "description": (
+        'Ribbon spine builder.\n\n'
+        'Select the spine joints IN ORDER, pelvis first (3 or more). '
+        'Lofts a NURBS ribbon through the chain, pins a transform per '
+        'joint with one uvPin node, and skins the ribbon to '
+        'bottom/mid/top driver joints with circle controls. Ribbon width '
+        'runs along world X.'
+    ),
+    "params": {'width': {'label': 'width',
+               'min': 0.1,
+               'tooltip': 'Ribbon width in scene units.'}},
+}
+
+
 def main(width=2.0, *args):
     try:
         width = float(width)

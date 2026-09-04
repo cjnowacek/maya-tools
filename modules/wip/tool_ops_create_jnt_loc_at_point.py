@@ -9,6 +9,15 @@ import maya.cmds as cmds
 logger = logging.getLogger(__name__)
 
 
+TOOL_META = {
+    "description": (
+        'Create a locator with a joint under it at the selected object.\n\n'
+        'For placing guide points that carry an orientable joint, e.g. on '
+        'the Build Locators guides.'
+    ),
+}
+
+
 def main(*args):
     create_jnt_loc()
 

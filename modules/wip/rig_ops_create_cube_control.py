@@ -27,6 +27,18 @@ CUBE_SHAPE = [
 ]
 
 
+TOOL_META = {
+    "description": (
+        'Create a cube curve control matched to each selected transform.\n\n'
+        'One degree-1 cube curve per selection, matched to its world '
+        'transform.'
+    ),
+    "params": {'scale': {'label': 'scale',
+               'min': 0.01,
+               'tooltip': 'Edge length of the cube control.'}},
+}
+
+
 def main(scale=1.0, *args):
     try:
         scale = float(scale)

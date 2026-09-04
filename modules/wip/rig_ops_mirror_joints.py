@@ -9,6 +9,19 @@ import maya.cmds as mc
 logger = logging.getLogger(__name__)
 
 
+TOOL_META = {
+    "description": (
+        'Mirror the selected joint chain across YZ with mirror behavior.\n\n'
+        'Side tokens are swapped in the copies using the search/replace '
+        'pair (repo convention: L_ / R_).'
+    ),
+    "params": {'search': {'label': 'search',
+                'tooltip': 'Token to find in joint names.'},
+     'replace': {'label': 'replace',
+                 'tooltip': 'Token it becomes on the mirrored side.'}},
+}
+
+
 def main(search="L_", replace="R_", *args):
     mirror_joints(search or "L_", replace or "R_")
 

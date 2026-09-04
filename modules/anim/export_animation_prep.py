@@ -1,5 +1,14 @@
 import maya.cmds as mc
 
+TOOL_META = {
+    "description": (
+        "Compile the export selection from display layers.\n\n"
+        "Removes all non-default namespaces (merging into parent), then "
+        "selects everything in the SKL_lyr and GEO_lyr display layers as "
+        "the final export selection. Scene must use those layer names."
+    ),
+}
+
 
 class AnimOpsExportPrep(object):
     def __init__(self):

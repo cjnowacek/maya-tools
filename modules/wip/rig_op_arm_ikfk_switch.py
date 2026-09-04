@@ -17,6 +17,19 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+TOOL_META = {
+    "description": (
+        'Arm auto-rig: IK/FK switch on top of existing BN joints.\n\n'
+        'Builds IK and FK chains over the bind arm, a blend switch, and '
+        "an auto-placed pole vector. Expects the repo's {side}_Name_BN "
+        'joint naming.'
+    ),
+    "params": {'side': {'label': 'side',
+              'choices': ['L', 'R'],
+              'tooltip': 'Which side of the character to build.'}},
+}
+
+
 def main(side="L", *args):
     RigOps_ArmIKFKSwitch(side or "L")
 

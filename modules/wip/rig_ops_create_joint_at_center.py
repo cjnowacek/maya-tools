@@ -7,6 +7,15 @@ import maya.cmds as mc
 logger = logging.getLogger(__name__)
 
 
+TOOL_META = {
+    "description": (
+        'Create a joint at the center of the current selection.\n\n'
+        'Works on component selections (vertices, edges, faces) and whole '
+        "objects: the joint lands on the selection's bounding center."
+    ),
+}
+
+
 def main(*args):
     create_joint_at_center()
 

@@ -11,6 +11,15 @@ import maya.cmds as cmds
 logger = logging.getLogger(__name__)
 
 
+TOOL_META = {
+    "description": (
+        'Insert a zeroed parent group above each selected object.\n\n'
+        "The group takes the object's world transform, so the object's "
+        'local channels read zero afterward. Existing parents are kept.'
+    ),
+}
+
+
 def main(*args):
     create_group_at_selection()
 

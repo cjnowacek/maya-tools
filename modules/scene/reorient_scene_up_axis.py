@@ -8,6 +8,15 @@ Description: Flips scene between Y and Z up
 import maya.cmds as cmds
 
 
+TOOL_META = {
+    "description": (
+        'Toggle the scene up axis between Y-up and Z-up.\n\n'
+        'Reads the current axis and flips to the other, rotating the view '
+        'to match. Existing objects are not rotated.'
+    ),
+}
+
+
 def main(*args):
 
     FlipUpAxis()

@@ -1,6 +1,21 @@
 from maya import cmds as mc
 from maya import mel as mel
 
+TOOL_META = {
+    "description": (
+        "Create a named poly sphere (radius 1, 20x20 spans).\n\n"
+        "Warns instead of overwriting if an object with that name already "
+        "exists. Mostly a template demonstrating the toolset's typed "
+        "parameter UI."
+    ),
+    "params": {
+        "sphere_name": {
+            "label": "name",
+            "tooltip": "Name for the new sphere; must not already exist.",
+        },
+    },
+}
+
 
 def main(sphere_name="default_sphere", *args):
     MeshOps_createSphere(sphere_name)

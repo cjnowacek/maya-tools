@@ -3,6 +3,16 @@ import maya.cmds as cmds
 
 logger = logging.getLogger(__name__)
 
+TOOL_META = {
+    "description": (
+        "Create the standard character rig hierarchy template.\n\n"
+        "Builds the empty group structure the rig tools expect:\n"
+        "RIG > Controls / Meshes (ExportMeshes, bak) / Skeleton.\n\n"
+        "Run once at the start of a new character; Character Rig Handler "
+        "detects and fills this structure."
+    ),
+}
+
 
 def main(*args):
     CharacterTemplate()

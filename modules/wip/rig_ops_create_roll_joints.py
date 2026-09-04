@@ -14,6 +14,24 @@ from maya import OpenMaya as om
 logger = logging.getLogger(__name__)
 
 
+TOOL_META = {
+    "description": (
+        'Create twist/roll joints along an arm-style chain.\n\n'
+        'Select four joints IN ORDER: root (clavicle), upper (shoulder), '
+        'mid (elbow), end (wrist). Twist joints are distributed along '
+        'upper-mid and mid-end, driven by SC-IK reader joints and orient '
+        'constraints isolating the twist axis (X down the chain).'
+    ),
+    "params": {'twist_joint_count': {'label': 'twists / segment',
+                           'min': 1,
+                           'max': 8,
+                           'tooltip': 'Twist joints per limb '
+                                      'segment.'},
+     'name': {'label': 'name',
+              'tooltip': 'Name token for the created twist joints.'}},
+}
+
+
 def main(twist_joint_count=2, name="twist", *args):
     try:
         twist_joint_count = int(twist_joint_count)

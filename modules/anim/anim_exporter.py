@@ -3,6 +3,15 @@ import maya.cmds as mc
 
 logger = logging.getLogger(__name__)
 
+TOOL_META = {
+    "description": (
+        "Prepare rigs for animation export (opens its own window).\n\n"
+        "Finds every *_rig transform in the scene, lets you pick which to "
+        "process, cleans namespaces, and compiles the skeleton + geometry "
+        "selection for export."
+    ),
+}
+
 
 class AnimOpsExportPrep(object):
     """
