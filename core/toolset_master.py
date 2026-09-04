@@ -23,8 +23,12 @@ import importlib
 import logging
 from typing import Dict, List, Optional
 
-from PySide2 import QtCore, QtWidgets
-from shiboken2 import wrapInstance
+try:
+    from PySide6 import QtCore, QtWidgets  # Maya 2025+
+    from shiboken6 import wrapInstance
+except ImportError:
+    from PySide2 import QtCore, QtWidgets  # Maya 2024 and earlier
+    from shiboken2 import wrapInstance
 
 from maya import cmds
 from maya import OpenMayaUI
@@ -58,6 +62,38 @@ def list_modules(script_path: str) -> List[str]:
     return module_names
 
 
+class _CurrentPageTabWidget(QtWidgets.QTabWidget):
+    """A QTabWidget that sizes to the CURRENT page only.
+
+    Stock QTabWidget reports the height of its tallest page (the inner
+    QStackedWidget takes the max of every page's sizeHint), so a tall tool on
+    a background tab pads the window forever. Overriding the hints to follow
+    the current page is the only reliable fix; size policies and
+    maximumHeight on hidden pages do not affect QTabWidget's own hint.
+    """
+
+    def _hint(self, base):
+        page = self.currentWidget()
+        if page is None:
+            return base
+        bar = self.tabBar().sizeHint()
+        ph = page.sizeHint()
+        # width from the widest page (stable tabs), height from the current one
+        return QtCore.QSize(max(base.width(), ph.width()),
+                            ph.height() + bar.height() + 8)
+
+    def sizeHint(self):
+        return self._hint(super().sizeHint())
+
+    def minimumSizeHint(self):
+        page = self.currentWidget()
+        if page is None:
+            return super().minimumSizeHint()
+        bar = self.tabBar().minimumSizeHint()
+        return QtCore.QSize(super().minimumSizeHint().width(),
+                            page.minimumSizeHint().height() + bar.height() + 8)
+
+
 class ToolsetTab(QtWidgets.QWidget):
     """
     Tab widget for each tool category. Dynamically renders parameter inputs
@@ -67,15 +103,29 @@ class ToolsetTab(QtWidgets.QWidget):
     def __init__(self, script_path: str, parent: Optional[QtWidgets.QWidget] = None):
         super(ToolsetTab, self).__init__(parent)
         self.script_path = script_path
-        self.param_widgets: Dict[str, QtWidgets.QLineEdit] = {}
+        self.param_widgets: Dict[str, QtWidgets.QWidget] = {}
 
         self.script_combobox = QtWidgets.QComboBox()
         self.run_button = QtWidgets.QPushButton("Run")
+
+        # Tool description, always visible
+        self.desc_label = QtWidgets.QLabel("No description available.")
+        self.desc_label.setWordWrap(True)
+        self.desc_label.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
+        self.desc_label.setStyleSheet(
+            "QLabel { background: rgba(0, 0, 0, 40); border-radius: 3px; padding: 6px; }"
+        )
 
         # Generic fallback input (shown when main has no named params)
         self.generic_label = QtWidgets.QLabel("Parameters:")
         self.generic_input = QtWidgets.QLineEdit("")
         self.generic_input.setPlaceholderText("Optional parameters")
+
+        # Custom per-tool panel (tier 3: module-level build_ui(parent))
+        self.custom_container = QtWidgets.QWidget()
+        self.custom_layout = QtWidgets.QVBoxLayout(self.custom_container)
+        self.custom_layout.setContentsMargins(0, 0, 0, 0)
+        self.custom_widget: Optional[QtWidgets.QWidget] = None
 
         # Dynamic per-parameter inputs
         self.params_container = QtWidgets.QWidget()
@@ -89,12 +139,87 @@ class ToolsetTab(QtWidgets.QWidget):
         layout = QtWidgets.QVBoxLayout(self)
         layout.addWidget(QtWidgets.QLabel("Select Script:"))
         layout.addWidget(self.script_combobox)
+        layout.addWidget(self.desc_label)
+        layout.addWidget(self.custom_container)
         layout.addWidget(self.params_container)
         layout.addLayout(generic_row)
         layout.addWidget(self.run_button)
         layout.setAlignment(QtCore.Qt.AlignTop)
 
         self.script_combobox.currentIndexChanged.connect(self._on_script_changed)
+
+    def _resize_to_fit(self) -> None:
+        """Keep the window tight: shrink to content, stretch only when the
+        description or parameter fields need the space.
+
+        Three window situations, three behaviors:
+          * plain ToolsetMaster dialog       -> Qt adjustSize
+          * floating workspaceControl        -> cmds.workspaceControl
+            resizeHeight (Qt adjustSize on the wrapper collapses the content
+            to its minimum hint, so the resize must go through Maya)
+          * docked in Maya's main window     -> leave alone (Maya's dock
+            splitters own the geometry; adjustSize there resizes ALL of Maya)
+        """
+        # two passes: immediately after the event loop settles, and once more
+        # shortly after, because a freshly embedded panel's sizeHint can grow
+        # when styles/polish land a tick later
+        QtCore.QTimer.singleShot(0, self._apply_resize)
+        QtCore.QTimer.singleShot(120, self._apply_resize)
+
+    def _apply_resize(self) -> None:
+        win = self.window()
+        if win is None:
+            return
+        if type(win).__name__ == "ToolsetMaster":
+            win.adjustSize()
+            return
+        if win.objectName() == "MayaWindow":
+            return
+        try:
+            # find the enclosing workspaceControl by walking up the parents
+            ctrl = None
+            w = self.parentWidget()
+            while w is not None:
+                name = w.objectName()
+                if name and cmds.workspaceControl(name, q=True, exists=True):
+                    ctrl = name
+                    break
+                w = w.parentWidget()
+            if not ctrl or not cmds.workspaceControl(ctrl, q=True, floating=True):
+                return
+            # size to the ToolsetMaster content (title + tabs + this tab)
+            owner = self.parentWidget()
+            while owner is not None and type(owner).__name__ != "ToolsetMaster":
+                owner = owner.parentWidget()
+            target = owner or self
+            # our tab widget overrides sizeHint; that does NOT invalidate the
+            # parent's cached layout, so nudge it before measuring, or the
+            # window keeps the previous (taller) tool's height
+            tabw = getattr(owner, "tab_widget", None)
+            if tabw is not None:
+                tabw.updateGeometry()
+            self.updateGeometry()
+            # Measure the LAYOUT's sizeHint, not the widget's: the dockable
+            # QDialog's own sizeHint() gets stuck at the tallest tool ever
+            # shown (Maya's mixin overrides it), while the layout hint tracks
+            # the current content live.
+            if target.layout() is not None:
+                target.layout().invalidate()
+                target.layout().activate()
+                height = target.layout().sizeHint().height() + 8
+            else:
+                height = target.sizeHint().height() + 8
+            # a control whose height is fixed/preferred ignores resizeHeight
+            try:
+                cmds.workspaceControl(ctrl, e=True, heightProperty="free")
+            except Exception:
+                pass
+            cmds.workspaceControl(ctrl, e=True, resizeHeight=height)
+        except Exception:
+            logger.debug("workspaceControl resize skipped", exc_info=True)
+
+    def _set_description(self, text: Optional[str]) -> None:
+        self.desc_label.setText(text or "No description available.")
 
     def _on_script_changed(self, index: int) -> None:
         module_name = self.script_combobox.itemData(index)
@@ -106,9 +231,16 @@ class ToolsetTab(QtWidgets.QWidget):
         while self.params_form.rowCount():
             self.params_form.removeRow(0)
         self.param_widgets.clear()
+        if self.custom_widget is not None:
+            self.custom_widget.setParent(None)
+            self.custom_widget.deleteLater()
+            self.custom_widget = None
+            self.custom_container.setMinimumHeight(0)
 
         if not script_name or not self.script_path:
+            self._set_description(None)
             self._show_generic(True)
+            self._resize_to_fit()
             return
 
         try:
@@ -116,9 +248,44 @@ class ToolsetTab(QtWidgets.QWidget):
                 sys.path.append(self.script_path)
 
             if script_name in sys.modules:
-                mod = sys.modules[script_name]
+                # Reload so edits to TOOL_META / docstrings / signatures show
+                # up on selection, not only after a Run (which reloads too).
+                try:
+                    mod = importlib.reload(sys.modules[script_name])
+                except Exception:
+                    mod = sys.modules[script_name]
             else:
                 mod = importlib.import_module(script_name)
+
+            meta = getattr(mod, "TOOL_META", None) or {}
+            doc = meta.get("description") or inspect.getdoc(mod)
+            if not doc and hasattr(mod, "main"):
+                doc = inspect.getdoc(mod.main)
+            self._set_description(doc)
+
+            # Tier 3: the tool supplies its own panel. The contract is
+            # predictable: build_ui(parent) returns a QWidget, embedded here;
+            # Run calls main(**ui_kwargs(widget)) if ui_kwargs exists, else
+            # main(). No build_ui -> declarative TOOL_META fields as usual.
+            if hasattr(mod, "build_ui"):
+                try:
+                    w = mod.build_ui(self.custom_container)
+                except Exception:
+                    logger.warning("build_ui failed for %r; falling back to "
+                                   "declarative params", script_name, exc_info=True)
+                    w = None
+                if w is not None:
+                    self.custom_layout.addWidget(w)
+                    self.custom_widget = w
+                    # reserve the panel's natural height so a deeply nested
+                    # custom widget cannot be collapsed to nothing by the
+                    # intermediate layouts (e.g. group boxes -> title only)
+                    self.custom_container.setMinimumHeight(
+                        w.sizeHint().height()
+                    )
+                    self._show_generic(False)
+                    self._resize_to_fit()
+                    return
 
             if not hasattr(mod, "main"):
                 self._show_generic(False)
@@ -137,35 +304,201 @@ class ToolsetTab(QtWidgets.QWidget):
 
             if named_params:
                 self._show_generic(False)
+                param_meta = meta.get("params", {})
                 for name, param in named_params:
-                    field = QtWidgets.QLineEdit()
-                    if param.default is not inspect.Parameter.empty:
-                        field.setText(str(param.default))
-                    self.params_form.addRow(name + ":", field)
+                    default = (
+                        param.default
+                        if param.default is not inspect.Parameter.empty
+                        else None
+                    )
+                    pmeta = param_meta.get(name, {})
+                    # dynamic choices: the module names a function that
+                    # returns the options for THIS scene (e.g. namespaces)
+                    fn = pmeta.get("choices_fn")
+                    if fn and hasattr(mod, fn):
+                        try:
+                            choices = list(getattr(mod, fn)() or [])
+                            if choices:
+                                pmeta = dict(pmeta, choices=choices)
+                        except Exception:
+                            logger.warning("choices_fn %r failed for %r",
+                                           fn, script_name, exc_info=True)
+                    field = self._widget_for_default(default, pmeta)
+                    label = pmeta.get("label", name) + ":"
+                    if pmeta.get("tooltip"):
+                        field.setToolTip(pmeta["tooltip"])
+                    self.params_form.addRow(label, field)
                     self.param_widgets[name] = field
             else:
                 self._show_generic(True)
 
         except Exception:
+            logger.warning("Could not inspect tool %r", script_name, exc_info=True)
+            self._set_description(None)
             self._show_generic(True)
+
+        self._resize_to_fit()
+
+    @staticmethod
+    def _widget_for_default(default, pmeta: Optional[dict] = None) -> QtWidgets.QWidget:
+        """A typed input widget matched to the parameter's default value.
+
+        ``pmeta`` (from the module's TOOL_META['params'][name]) can refine it:
+        ``choices`` renders a dropdown, ``min``/``max`` clamp the spinboxes.
+        """
+        pmeta = pmeta or {}
+        choices = pmeta.get("choices")
+        if choices:
+            widget = QtWidgets.QComboBox()
+            for c in choices:
+                widget.addItem(str(c), c)
+            if default is not None and default in choices:
+                widget.setCurrentIndex(list(choices).index(default))
+            if pmeta.get("editable"):
+                widget.setEditable(True)
+            return widget
+        if isinstance(default, bool):
+            widget = QtWidgets.QCheckBox()
+            widget.setChecked(default)
+        elif isinstance(default, int):
+            widget = QtWidgets.QSpinBox()
+            widget.setRange(int(pmeta.get("min", -1000000)), int(pmeta.get("max", 1000000)))
+            widget.setValue(default)
+        elif isinstance(default, float):
+            widget = QtWidgets.QDoubleSpinBox()
+            widget.setRange(
+                float(pmeta.get("min", -1000000.0)), float(pmeta.get("max", 1000000.0))
+            )
+            widget.setDecimals(3)
+            widget.setValue(default)
+        else:
+            widget = QtWidgets.QLineEdit()
+            if default is not None:
+                widget.setText(str(default))
+        return widget
 
     def _show_generic(self, visible: bool) -> None:
         self.generic_label.setVisible(visible)
         self.generic_input.setVisible(visible)
 
+    def apply_presets(self, presets: dict) -> None:
+        """Fill the rendered param widgets with the given values."""
+        for name, value in (presets or {}).items():
+            widget = self.param_widgets.get(name)
+            if widget is None:
+                continue
+            if isinstance(widget, QtWidgets.QComboBox):
+                idx = widget.findData(value)
+                if idx < 0:
+                    idx = widget.findText(str(value))
+                if idx >= 0:
+                    widget.setCurrentIndex(idx)
+                elif widget.isEditable():
+                    widget.setEditText(str(value))
+            elif isinstance(widget, QtWidgets.QCheckBox):
+                widget.setChecked(bool(value))
+            elif isinstance(widget, (QtWidgets.QSpinBox, QtWidgets.QDoubleSpinBox)):
+                widget.setValue(value)
+            else:
+                widget.setText(str(value))
+
     def get_kwargs(self) -> dict:
-        """Return named parameter values, casting to float/int where possible."""
+        """Return named parameter values from the typed widgets."""
         result = {}
         for name, widget in self.param_widgets.items():
-            text = widget.text()
-            for cast in (int, float):
-                try:
-                    text = cast(text)
-                    break
-                except (ValueError, TypeError):
-                    pass
-            result[name] = text
+            if isinstance(widget, QtWidgets.QComboBox):
+                if widget.isEditable():
+                    # typed text wins: currentData() keeps returning the last
+                    # ITEM's data even after the user types something else
+                    text = widget.currentText()
+                    idx = widget.findText(text)
+                    result[name] = widget.itemData(idx) if idx >= 0 else text
+                else:
+                    result[name] = widget.currentData()
+            elif isinstance(widget, QtWidgets.QCheckBox):
+                result[name] = widget.isChecked()
+            elif isinstance(widget, (QtWidgets.QSpinBox, QtWidgets.QDoubleSpinBox)):
+                result[name] = widget.value()
+            else:
+                text = widget.text()
+                for cast in (int, float):
+                    try:
+                        text = cast(text)
+                        break
+                    except (ValueError, TypeError):
+                        pass
+                result[name] = text
         return result
+
+
+class WorkflowTab(ToolsetTab):
+    """Adaptive workflow tab: a checklist of pipeline steps read from the
+    scene's TOOLSET_META node. Done steps show when and what they built,
+    the next step is highlighted, and clicking any row jumps to that step's
+    tool with its parameters preset."""
+
+    _STYLE = {
+        "done": "QPushButton { text-align: left; color: #8bc34a; border: none;"
+                " padding: 2px 6px; }",
+        "next": "QPushButton { text-align: left; color: #ffc857; border: 1px"
+                " solid #ffc857; border-radius: 3px; padding: 2px 6px;"
+                " font-weight: bold; }",
+        "todo": "QPushButton { text-align: left; color: #9a9a9a; border: none;"
+                " padding: 2px 6px; }",
+    }
+
+    def __init__(self, script_path, navigate=None, parent=None):
+        super(WorkflowTab, self).__init__(script_path, parent)
+        self._navigate = navigate
+        self.steps_box = QtWidgets.QGroupBox("Scene Progress")
+        self.steps_layout = QtWidgets.QVBoxLayout(self.steps_box)
+        self.steps_layout.setContentsMargins(6, 4, 6, 6)
+        self.steps_layout.setSpacing(1)
+        self.layout().insertWidget(0, self.steps_box)
+        self.refresh_steps()
+
+    def refresh_steps(self) -> None:
+        while self.steps_layout.count():
+            item = self.steps_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        try:
+            from modules.rig.Lib import scene_meta
+            order = scene_meta.STEP_ORDER
+            next_step, _ = scene_meta.next_step()
+            entries = {step: scene_meta.info(step) for step, _ in order}
+            links = {step: scene_meta.linked(step) for step, _ in order}
+        except Exception:
+            logger.warning("workflow steps unavailable", exc_info=True)
+            self.steps_box.setVisible(False)
+            return
+        self.steps_box.setVisible(True)
+        for step, label in order:
+            entry = entries.get(step)
+            if entry:
+                state, prefix = "done", "[done] "
+                tip = "Done {}".format(entry.get("time", ""))
+                if links.get(step):
+                    tip += "  ->  " + ", ".join(links[step])
+            elif step == next_step:
+                state, prefix = "next", ">  "
+                tip = "Suggested next step. Click to open its tool."
+            else:
+                state, prefix = "todo", "[    ] "
+                tip = "Click to open this step's tool."
+            btn = QtWidgets.QPushButton(prefix + label)
+            btn.setStyleSheet(self._STYLE[state])
+            btn.setCursor(QtCore.Qt.PointingHandCursor)
+            btn.setToolTip(tip)
+            btn.clicked.connect(
+                lambda checked=False, st=step: self._go(st)
+            )
+            self.steps_layout.addWidget(btn)
+        self._resize_to_fit()
+
+    def _go(self, step: str) -> None:
+        if self._navigate is not None:
+            self._navigate(step)
 
 
 class ToolsetMaster(MayaQWidgetDockableMixin, QtWidgets.QDialog):
@@ -198,23 +531,63 @@ class ToolsetMaster(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         self.create_connections()
 
     def create_widgets(self) -> None:
-        self.tabs = {
-            "Rig": ToolsetTab(Config.get_tool_path("rig")),
-            "Anim": ToolsetTab(Config.get_tool_path("anim")),
-            "Model": ToolsetTab(Config.get_tool_path("model")),
-            "Scene": ToolsetTab(Config.get_tool_path("scene")),
-            "Wip": ToolsetTab(Config.get_tool_path("wip")),
+        # tab label -> tool category (folder key in Config.TOOL_PATHS);
+        # "Manual" shows the wip folder: hand-run building blocks, several
+        # of which are unfinished or destined to be wrapped into workflow
+        # composites
+        self.tab_categories = {
+            "Workflow": "workflow",
+            "Rig": "rig",
+            "Anim": "anim",
+            "Model": "model",
+            "Scene": "scene",
+            "Manual": "wip",
         }
+        self.tabs = {}
+        for label, category in self.tab_categories.items():
+            path = Config.get_tool_path(category)
+            if label == "Workflow":
+                self.tabs[label] = WorkflowTab(path, navigate=self._navigate_step)
+            else:
+                self.tabs[label] = ToolsetTab(path)
 
-        for key, tab in self.tabs.items():
-            for module_name in self.module_names.get(key.lower(), []):
+        for label, tab in self.tabs.items():
+            category = self.tab_categories[label]
+            for module_name in self.module_names.get(category, []):
                 tab.script_combobox.addItem(
                     format_display_name(module_name), module_name
                 )
 
-        self.tab_widget = QtWidgets.QTabWidget()
+        self.tab_widget = _CurrentPageTabWidget()
         for name, tab in self.tabs.items():
             self.tab_widget.addTab(tab, name)
+        # resize the window whenever the tab itself changes; the workflow
+        # tab also re-reads the scene state whenever it is shown
+        self.tab_widget.currentChanged.connect(self._on_tab_changed)
+
+    def _on_tab_changed(self, index: int) -> None:
+        page = self.tab_widget.widget(index)
+        if isinstance(page, WorkflowTab):
+            page.refresh_steps()
+        page._resize_to_fit()
+
+    def _navigate_step(self, step: str) -> None:
+        """Jump to a workflow step's tool with its parameters preset."""
+        try:
+            from modules.rig.Lib import scene_meta
+            tab_name, tool, presets = scene_meta.STEP_TOOLS.get(
+                step, (None, None, {}))
+        except Exception:
+            logger.warning("cannot navigate step %r", step, exc_info=True)
+            return
+        if not tool or tab_name not in self.tabs:
+            return
+        tab = self.tabs[tab_name]
+        self.tab_widget.setCurrentWidget(tab)
+        idx = tab.script_combobox.findData(tool)
+        if idx >= 0:
+            tab.script_combobox.setCurrentIndex(idx)
+            tab.apply_presets(presets)
 
     def create_layout(self) -> None:
         main_layout = QtWidgets.QVBoxLayout(self)
@@ -225,14 +598,14 @@ class ToolsetMaster(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         main_layout.addWidget(self.tab_widget)
 
     def create_connections(self) -> None:
-        for category, tab in self.tabs.items():
+        for label, tab in self.tabs.items():
             tab.run_button.clicked.connect(
-                lambda checked=False, cat=category.lower(): self.run_script(cat)
+                lambda checked=False, lbl=label: self.run_script(lbl)
             )
 
-    def run_script(self, category: str) -> None:
-        script_path = Config.get_tool_path(category)
-        tab = self.tabs[category.capitalize()]
+    def run_script(self, label: str) -> None:
+        script_path = Config.get_tool_path(self.tab_categories[label])
+        tab = self.tabs[label]
         selected_script = tab.script_combobox.currentData()
 
         if not selected_script:
@@ -254,7 +627,12 @@ class ToolsetMaster(MayaQWidgetDockableMixin, QtWidgets.QDialog):
                 cmds.warning(f"No main() found in {selected_script}")
                 return
 
-            if tab.param_widgets:
+            if tab.custom_widget is not None:
+                if hasattr(module, "ui_kwargs"):
+                    result = module.main(**module.ui_kwargs(tab.custom_widget))
+                else:
+                    result = module.main()
+            elif tab.param_widgets:
                 result = module.main(**tab.get_kwargs())
             else:
                 user_input = tab.generic_input.text()
@@ -262,6 +640,10 @@ class ToolsetMaster(MayaQWidgetDockableMixin, QtWidgets.QDialog):
 
             if result and hasattr(result, "show"):
                 result.show()
+
+            wf = self.tabs.get("Workflow")
+            if isinstance(wf, WorkflowTab):
+                wf.refresh_steps()
 
         except ImportError as e:
             cmds.warning(f"Error importing {selected_script}: {e}")
@@ -276,6 +658,16 @@ def show_ui() -> ToolsetMaster:
             if isinstance(widget, ToolsetMaster):
                 widget.close()
                 widget.deleteLater()
+        # Closing the dialog does NOT remove its workspaceControl wrapper:
+        # every relaunch would otherwise leave a ghost window behind (and the
+        # user ends up looking at a stale copy while resizes go to the new
+        # one). Delete all previous wrappers explicitly.
+        for ctrl in cmds.lsUI(type="workspaceControl") or []:
+            if ctrl.startswith("ToolsetMaster_"):
+                try:
+                    cmds.deleteUI(ctrl)
+                except RuntimeError:
+                    pass
     except Exception as e:
         cmds.warning(f"Error closing existing widget: {e}")
 

@@ -30,24 +30,44 @@ import logging
 import maya.cmds as cmds
 import maya.OpenMayaUI as omui
 from maya.app.general.mayaMixin import MayaQWidgetDockableMixin
-from shiboken2 import wrapInstance
-from PySide2.QtCore import Qt
-from PySide2.QtWidgets import (
-    QWidget,
-    QPushButton,
-    QLineEdit,
-    QSlider,
-    QRadioButton,
-    QHBoxLayout,
-    QVBoxLayout,
-    QGroupBox,
-    QLabel,
-    QComboBox,
-    QSpinBox,
-    QTabWidget,
-    QMenuBar,
-    QMenu,
-)
+try:
+    from shiboken6 import wrapInstance  # Maya 2025+
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import (
+        QWidget,
+        QPushButton,
+        QLineEdit,
+        QSlider,
+        QRadioButton,
+        QHBoxLayout,
+        QVBoxLayout,
+        QGroupBox,
+        QLabel,
+        QComboBox,
+        QSpinBox,
+        QTabWidget,
+        QMenuBar,
+        QMenu,
+    )
+except ImportError:
+    from shiboken2 import wrapInstance  # Maya 2024 and earlier
+    from PySide2.QtCore import Qt
+    from PySide2.QtWidgets import (
+        QWidget,
+        QPushButton,
+        QLineEdit,
+        QSlider,
+        QRadioButton,
+        QHBoxLayout,
+        QVBoxLayout,
+        QGroupBox,
+        QLabel,
+        QComboBox,
+        QSpinBox,
+        QTabWidget,
+        QMenuBar,
+        QMenu,
+    )
 
 
 from modules.rig.Lib import joint_tools as jt
@@ -58,6 +78,16 @@ logger = logging.getLogger(__name__)
 # ------------------------------
 # Utility Functions
 # ------------------------------
+TOOL_META = {
+    "description": (
+        'Quick Tools rigging window (opens its own window).\n\n'
+        'Dockable tabs for joint work: toggle local rotation axes, create '
+        'and aim joints, orient joints with axis pickers, batch renaming, '
+        'and the rig compiler.'
+    ),
+}
+
+
 def print_widget_name(widget_name):
     """Helper to log the name of interacted widgets."""
     logger.debug(f"Widget '{widget_name}' was interacted with.")

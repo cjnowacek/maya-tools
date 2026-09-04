@@ -25,7 +25,7 @@ When running from the Script Editor, `__file__` is undefined, so the launcher fa
 ```
 toolset_launcher.py        # sys.path bootstrap + reload; calls toolset_master.show_ui()
 core/
-  toolset_master.py        # Main dockable QDialog; tabs: Rig | Anim | Model | Scene | Wip
+  toolset_master.py        # Main dockable QDialog; tabs: Workflow | Rig | Anim | Model | Scene | Wip
   Config.py                # Central config: TOOL_PATHS, UI sizes, joint DEFAULTS, scene-path helpers
   path_utils.py            # Scene file-path globals (legacy/standalone helper)
 modules/
@@ -37,9 +37,15 @@ modules/
   wip/                     # Experimental tools (shown last in the UI)
 ```
 
-### The `main(*args)` contract
+### The tool contract (three tiers)
 
-**Every tool module must expose a top-level `main(...)` function** — it is the required and only entry point the UI calls. Modules in `Lib/` (e.g. `joint_tools.py`) are imported as helpers and are not invoked directly by the UI.
+**Every tool module must expose a top-level `main(...)` function.** Modules in `Lib/` (e.g. `joint_tools.py`, `scene_meta.py`, `build_locators.py`) are imported as helpers and are not invoked directly by the UI. On top of `main`, a tool opts into richer UI declaratively:
+
+1. **Nothing else declared** — one generic text input, passed as a positional string.
+2. **`TOOL_META` dict** — `"description"` fills the always-visible description panel (module docstring is the fallback); `"params"` refines the auto-generated widgets per parameter: `label`, `tooltip`, `min`/`max` (clamp spinboxes), `choices` (dropdown), `choices_fn` (name of a module function returning per-scene options, e.g. namespaces), `editable` (combobox accepts typed text).
+3. **`def build_ui(parent)`** — the tool returns its own QWidget, embedded in the main window on selection (no popups). Run calls `main(**ui_kwargs(widget))` if the module defines `ui_kwargs`, else `main()`. Use only for real interaction that fields cannot express (see `anim_master.py`); prefer tier 2.
+
+The workflow composites in `modules/workflow/` record/read scene state through `Lib/scene_meta.py` (a `TOOLSET_META` network node with message links to built nodes), guard against double-builds, and redirect to the correct builder when prerequisites are missing.
 
 `ToolsetMaster.run_script()` dynamically imports (or `importlib.reload`s) the selected module and calls `main`. If `main` returns an object with a `.show()` method (a Qt widget), the UI shows it — this is how tools open their own secondary windows.
 

@@ -1,11 +1,27 @@
 import logging
 import maya.cmds as cmds
 import maya.mel as mel
-from PySide2 import QtWidgets, QtCore
+try:
+    from PySide6 import QtWidgets, QtCore  # Maya 2025+
+    from shiboken6 import wrapInstance
+except ImportError:
+    from PySide2 import QtWidgets, QtCore  # Maya 2024 and earlier
+    from shiboken2 import wrapInstance
 import maya.OpenMayaUI as omui
-from shiboken2 import wrapInstance
 
 logger = logging.getLogger(__name__)
+
+TOOL_META = {
+    "description": (
+        "Rig creation and FBX export manager (opens its own window).\n\n"
+        "Create tab: find template hierarchies, build a named {name}_rig "
+        "structure from them.\n"
+        "Export tab: find rigs by name pattern (*_rig), clean namespaces, "
+        "and export the rig or its animation to FBX.\n\n"
+        "Note: the FBX output path inside _export_rig() is a placeholder "
+        "and needs updating before first use."
+    ),
+}
 
 
 def maya_main_window():

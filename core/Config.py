@@ -18,6 +18,7 @@ class Config:
     # Keys must match the on-disk folder casing exactly; Windows tolerates
     # mismatches but Linux/macOS do not
     TOOL_PATHS = {
+        "workflow": os.path.join(ROOT_DIR, "modules", "workflow"),
         "model": os.path.join(ROOT_DIR, "modules", "model"),
         "rig": os.path.join(ROOT_DIR, "modules", "rig"),
         "anim": os.path.join(ROOT_DIR, "modules", "anim"),
