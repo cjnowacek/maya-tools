@@ -160,8 +160,28 @@ def _pin_joints(prefix, tag, srf, count, parent, radius, existing=None):
         dm = cmds.createNode('decomposeMatrix', name='%s%s%02d_dcm' % (prefix, tag, i + 1))
         cmds.connectAttr(mm + '.matrixSum', dm + '.inputMatrix')
         cmds.connectAttr(dm + '.outputTranslate', j + '.translate')
-        cmds.connectAttr(dm + '.outputRotate', j + '.rotate')
         cmds.connectAttr(dm + '.outputScale', j + '.scale')
+
+        # Rest-pose cleanliness: the surface frame differs from the joint's
+        # frame by a constant roll (e.g. 90/180 deg about X), which would sit
+        # in .rotate forever and pollute the twist reading. Bake that rest
+        # rotation into jointOrient (where rest offsets belong) and feed
+        # .rotate the delta, so channels read ~0 at rest. Maya composes
+        # local rotation as R * JO, hence R = L * JOinv.
+        rest_local = om.MMatrix(cmds.getAttr(mm + '.matrixSum'))
+        rest_rot = om.MTransformationMatrix(rest_local).rotation()
+        cmds.setAttr(j + '.jointOrient', *[math.degrees(a) for a in rest_rot])
+        jo_inv = om.MTransformationMatrix(
+            om.MMatrix()).asMatrix()  # placeholder, replaced below
+        rot_only = om.MTransformationMatrix()
+        rot_only.setRotation(rest_rot)
+        jo_inv = rot_only.asMatrix().inverse()
+        mm_r = cmds.createNode('multMatrix', name='%s%s%02d_rotDelta' % (prefix, tag, i + 1))
+        cmds.connectAttr(mm + '.matrixSum', mm_r + '.matrixIn[0]')
+        cmds.setAttr(mm_r + '.matrixIn[1]', list(jo_inv), type='matrix')
+        dm_r = cmds.createNode('decomposeMatrix', name='%s%s%02d_dcmR' % (prefix, tag, i + 1))
+        cmds.connectAttr(mm_r + '.matrixSum', dm_r + '.inputMatrix')
+        cmds.connectAttr(dm_r + '.outputRotate', j + '.rotate')
         joints.append(j)
     return pin, joints
 
@@ -186,10 +206,10 @@ def add_ribbons(prefix, rig, P, joints_per_segment=5, mid_ctrl=True, width=None,
 
     out = {'surfaces': [], 'pins': [], 'joints': [], 'drivers': [], 'mid_ctrls': []}
 
-    segments = [(seg_tags[0], 'Thigh', 'Knee', bind[0], bind[1]),
-                (seg_tags[1], 'Knee', 'Ankle', bind[1], bind[2])]
+    segments = [(seg_tags[0], 'Thigh', 'Knee', bind[0], bind[1], 'upper'),
+                (seg_tags[1], 'Knee', 'Ankle', bind[1], bind[2], 'lower')]
 
-    for tag, g0, g1, j0, j1 in segments:
+    for tag, g0, g1, j0, j1, kind in segments:
         start, end = P[g0], P[g1]
         aim = lrb.norm(lrb.sub(end, start))
         srf = _make_surface(prefix + tag + '_srf', start, end, n_plane, w,
@@ -200,31 +220,35 @@ def add_ribbons(prefix, rig, P, joints_per_segment=5, mid_ctrl=True, width=None,
                       aim, n_plane, grp, radius)
         bot = _driver('%s%s_bot_drv' % (prefix, tag), end, aim, n_plane, grp, radius)
 
-        if tag == 'thighRibbon':
-            # The top of the femur must NOT twist with the femur, so the top
-            # driver only follows the swing: point to the hip, aim at the knee,
-            # up-vector taken from the (non-twisting) hip group.
+        # One SAME-FACING construction for every segment: top defines the
+        # frame, bot inherits it via a single-target orient (nothing opposed,
+        # nothing averaged - opposed-frame averaging was the R-side wonk and
+        # the halfway ill-definition), and twist enters NUMERICALLY on the
+        # skinned bottom driver from a swing-twist matrix reader (the aim
+        # up-vector route flips 180 when the end joint's up axis sweeps
+        # toward the bone: seen live at foot rotateY +10).
+        if kind == 'upper':
+            # top must NOT twist with the bone (hip/shoulder end stays put)
             cmds.pointConstraint(j0, top, maintainOffset=False)
             cmds.aimConstraint(j1, top, aimVector=(1, 0, 0), upVector=(0, 0, 1),
                                worldUpType='objectrotation', worldUpObject=rig['glob'],
                                worldUpVector=(0, 0, 1), maintainOffset=False)
+            twist_src = lrb.twist_reader('%s%s_twist' % (prefix, tag), j0)
         else:
+            # top follows the joint frame (carries the upper bone's end twist)
             cmds.parentConstraint(j0, top, maintainOffset=False)
-        # The bottom driver has to keep THIS segment's frame. A joint's X runs
-        # down the NEXT bone, so constraining straight to j1 pointed the shin's
-        # bottom driver at the toes (X.aim 0.337, about 70 degrees off) and
-        # dragged the mid control half way there with it. Aim back at the top
-        # driver so +X stays on this bone, and take the up vector from j1 so
-        # the end joint's twist still propagates while its pitch does not bend
-        # the segment.
+            twist_src = lrb.twist_reader('%s%s_twist' % (prefix, tag), j1, ref=j0)
         cmds.pointConstraint(j1, bot, maintainOffset=False)
-        cmds.aimConstraint(top, bot, aimVector=(-1, 0, 0), upVector=(0, 0, 1),
-                           worldUpType='objectrotation', worldUpObject=j1,
-                           worldUpVector=(0, 0, 1), maintainOffset=False)
+        cmds.orientConstraint(top, bot, maintainOffset=False)
+        bot_drv = cmds.createNode('joint', name='%s%s_botTwist_drv' % (prefix, tag),
+                                  parent=bot)
+        cmds.setAttr(bot_drv + '.radius', radius * 0.8)
+        cmds.connectAttr(twist_src, bot_drv + '.rotateX')
+        skin_bot = bot_drv
 
         mid_grp = cmds.group(empty=True, name='%s%s_mid_grp' % (prefix, tag), parent=grp)
         cmds.pointConstraint(top, bot, mid_grp, maintainOffset=False)
-        cmds.orientConstraint(top, bot, mid_grp, maintainOffset=False)
+        cmds.orientConstraint(top, mid_grp, maintainOffset=False)
         if mid_ctrl:
             c = cmds.circle(name='%s%s_mid_ctrl' % (prefix, tag), normal=(1, 0, 0),
                             radius=w * 1.6, constructionHistory=False)[0]
@@ -238,8 +262,13 @@ def add_ribbons(prefix, rig, P, joints_per_segment=5, mid_ctrl=True, width=None,
             cmds.parent(mid, mid_grp)
             cmds.setAttr(mid + '.translate', 0, 0, 0)
             cmds.setAttr(mid + '.jointOrient', 0, 0, 0)
+        # half the segment twist on the mid driver (X runs down-bone)
+        half = cmds.createNode('multDoubleLinear', name='%s%s_twistHalf' % (prefix, tag))
+        cmds.setAttr(half + '.input2', 0.5)
+        cmds.connectAttr(twist_src, half + '.input1')
+        cmds.connectAttr(half + '.output', mid + '.rotateX')
 
-        _skin_ribbon(srf, [top, mid, bot], start, end)
+        _skin_ribbon(srf, [top, mid, skin_bot], start, end)
         # Parent under the segment's own bind joint, so the exported skeleton
         # is a real hierarchy rather than a flat row of pinned joints.
         seg_existing = (existing or {}).get(tag)
@@ -251,6 +280,7 @@ def add_ribbons(prefix, rig, P, joints_per_segment=5, mid_ctrl=True, width=None,
         cmds.setAttr(srf + '.visibility', lock=True)
         for d in (top, mid, bot):
             cmds.setAttr(d + '.visibility', 0)
+        out['drivers'] += [top, mid, skin_bot]
 
         out['surfaces'].append(srf)
         out['pins'].append(pin)

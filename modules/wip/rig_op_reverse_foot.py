@@ -7,7 +7,9 @@ uses) and parents it into the reverse chain so foot roll drives the leg IK.
 
 Builds the classic reverse pivot hierarchy (heel > toe > ball > ankle),
 single-chain IK handles for ankle->ball and ball->toe, and a foot control
-with HeelRoll / BallRoll / ToeRoll / ToeSpin / Bank attributes.
+with a combined Roll + RollBreak (heel back, ball up to the break angle,
+then over the toe) plus manual HeelRoll / BallRoll / ToeRoll / ToeSpin /
+Bank attributes summed on top.
 
 Assumes the character faces +Z with world-oriented pivots: roll maps to
 rotateX, spin to rotateY, bank to rotateZ. Adjust the connections if your
@@ -98,15 +100,38 @@ def build_reverse_foot(side="L"):
     mc.makeIdentity(ctl, apply=True, t=True, r=True, s=True)
     mc.parent(top, ctl)
 
-    for attr, node, axis in (
-        ("HeelRoll", heel_piv, "rotateX"),
-        ("BallRoll", ball_piv, "rotateX"),
-        ("ToeRoll", toe_piv, "rotateX"),
-        ("ToeSpin", toe_piv, "rotateY"),
-        ("Bank", ball_piv, "rotateZ"),
-    ):
+    for attr in ("HeelRoll", "BallRoll", "ToeRoll", "ToeSpin", "Bank",
+                 "Roll"):
         mc.addAttr(ctl, ln=attr, at="float", k=True)
-        mc.connectAttr("{}.{}".format(ctl, attr), "{}.{}".format(node, axis))
+    mc.addAttr(ctl, ln="RollBreak", at="float", k=True, dv=35.0, min=0, max=90)
+    mc.connectAttr(ctl + ".ToeSpin", toe_piv + ".rotateY")
+    mc.connectAttr(ctl + ".Bank", ball_piv + ".rotateZ")
+
+    # Single Roll with a heel break, summed with the manual per-pivot attrs:
+    #   heel = HeelRoll + clamp(Roll, -360, 0)          (negative rocks back)
+    #   ball = BallRoll + clamp(Roll, 0, RollBreak)     (heel lifts first)
+    #   toe  = ToeRoll  + clamp(Roll - RollBreak, 0+)   (then rolls over toe)
+    cl_heel = mc.createNode("clamp", n="{}_heelRoll_clamp".format(name))
+    mc.setAttr(cl_heel + ".minR", -360)
+    mc.connectAttr(ctl + ".Roll", cl_heel + ".inputR")
+    cl_ball = mc.createNode("clamp", n="{}_ballRoll_clamp".format(name))
+    mc.connectAttr(ctl + ".RollBreak", cl_ball + ".maxR")
+    mc.connectAttr(ctl + ".Roll", cl_ball + ".inputR")
+    sub_toe = mc.createNode("plusMinusAverage", n="{}_toeRoll_sub".format(name))
+    mc.setAttr(sub_toe + ".operation", 2)
+    mc.connectAttr(ctl + ".Roll", sub_toe + ".input1D[0]")
+    mc.connectAttr(ctl + ".RollBreak", sub_toe + ".input1D[1]")
+    cl_toe = mc.createNode("clamp", n="{}_toeRoll_clamp".format(name))
+    mc.setAttr(cl_toe + ".maxR", 360)
+    mc.connectAttr(sub_toe + ".output1D", cl_toe + ".inputR")
+    for manual, auto, piv in (("HeelRoll", cl_heel + ".outputR", heel_piv),
+                              ("BallRoll", cl_ball + ".outputR", ball_piv),
+                              ("ToeRoll", cl_toe + ".outputR", toe_piv)):
+        pma = mc.createNode("plusMinusAverage",
+                            n="{}_{}_sum".format(name, manual))
+        mc.connectAttr("{}.{}".format(ctl, manual), pma + ".input1D[0]")
+        mc.connectAttr(auto, pma + ".input1D[1]")
+        mc.connectAttr(pma + ".output1D", piv + ".rotateX")
 
     mc.select(ctl)
     logger.debug("Built reverse foot %s", top)

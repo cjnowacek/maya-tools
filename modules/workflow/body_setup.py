@@ -82,6 +82,13 @@ TOOL_META = {
             "choices": ["none", "roll", "ribbon"],
             "tooltip": "Drive the leg's skeleton twist joints.",
         },
+        "leg_stretch": {
+            "label": "stretch",
+            "group": "Legs",
+            "tooltip": "IK stretch: the leg lengthens (never compresses) "
+                       "when the foot control reaches past full extension. "
+                       "FK mode is unaffected.",
+        },
         "torso_build": {
             "label": "build",
             "group": "Torso",
@@ -104,14 +111,16 @@ MODULE_SEGMENTS = {
 
 
 def main(sides="both", arm_build="ikfk", arm_twist="none",
-         leg_build="ikfk", leg_twist="none", torso_build="none", *args):
+         leg_build="ikfk", leg_twist="none", leg_stretch=False,
+         torso_build="none", *args):
     side_list = ["L", "R"] if (sides or "both") == "both" else [sides]
     results = {}
     for side in side_list:
         if arm_build != "none":
             results["arm_" + side] = build_arm(side, arm_twist)
         if leg_build != "none":
-            results["leg_" + side] = build_leg(side, leg_twist)
+            results["leg_" + side] = build_leg(side, leg_twist,
+                                               bool(leg_stretch))
     if torso_build != "none":
         results["torso"] = build_torso(torso_build)
     if not results:
@@ -284,7 +293,83 @@ def _heel_guide(side):
     return heel
 
 
-def build_leg(side, twist="none"):
+def _add_leg_stretch(side):
+    """IK-only stretch: lengthen (never compress) past full extension.
+
+    Measures hip to the reverse foot's ankle pivot (so foot roll counts),
+    scales the IK chain's translateX, and gates the factor with the IKFK
+    switch so FK is untouched. Same distance -> divide -> condition pattern
+    proven on the leg iteration rigs (locators upstream of the solve; a
+    measurement downstream would cycle).
+    """
+    ik_calf = "{}_Calf_IK_JNT".format(side)
+    ik_ankle = "{}_Ankle_IK_JNT".format(side)
+    ankle_piv = "{}_Foot_Ankle_PIV".format(side)
+    thigh_ik = "{}_Thigh_IK_JNT".format(side)
+    for req in (ik_calf, ik_ankle, ankle_piv, thigh_ik):
+        if not mc.objExists(req):
+            mc.warning("Stretch skipped: {} not found.".format(req))
+            return False
+    rest_calf = mc.getAttr(ik_calf + ".translateX")
+    rest_ankle = mc.getAttr(ik_ankle + ".translateX")
+    rest_len = abs(rest_calf) + abs(rest_ankle)
+
+    start = mc.spaceLocator(name="{}_Leg_stretchStart_LOC".format(side))[0]
+    mc.xform(start, ws=True,
+             t=mc.xform(thigh_ik, q=True, ws=True, t=True))
+    parent = (mc.listRelatives(thigh_ik, parent=True, fullPath=True)
+              or [None])[0]
+    if parent:
+        start = mc.parent(start, parent)[0]
+    end = mc.spaceLocator(name="{}_Leg_stretchEnd_LOC".format(side))[0]
+    mc.xform(end, ws=True, t=mc.xform(ankle_piv, q=True, ws=True, t=True))
+    end = mc.parent(end, ankle_piv)[0]
+    for loc in (start, end):
+        mc.setAttr(loc + ".visibility", 0)
+
+    dist = mc.createNode("distanceBetween",
+                         n="{}_Leg_stretch_dist".format(side))
+    mc.connectAttr(start + ".worldMatrix[0]", dist + ".inMatrix1")
+    mc.connectAttr(end + ".worldMatrix[0]", dist + ".inMatrix2")
+    factor = mc.createNode("multiplyDivide",
+                           n="{}_Leg_stretch_factor".format(side))
+    mc.setAttr(factor + ".operation", 2)
+    mc.connectAttr(dist + ".distance", factor + ".input1X")
+    mc.setAttr(factor + ".input2X", rest_len)
+    cond = mc.createNode("condition", n="{}_Leg_stretch_cond".format(side))
+    mc.setAttr(cond + ".operation", 2)
+    mc.connectAttr(dist + ".distance", cond + ".firstTerm")
+    mc.setAttr(cond + ".secondTerm", rest_len)
+    mc.connectAttr(factor + ".outputX", cond + ".colorIfTrueR")
+    mc.setAttr(cond + ".colorIfFalseR", 1.0)
+    # gate with the IKFK switch: factor in IK (switch 0), exactly 1 in FK
+    gate = mc.createNode("blendTwoAttr", n="{}_Leg_stretch_gate".format(side))
+    mc.connectAttr(cond + ".outColorR", gate + ".input[0]")
+    mc.setAttr(gate + ".input[1]", 1.0)
+    mc.connectAttr("{}_Leg_ATRIBUTES_GRP.IKFK_Switch".format(side),
+                   gate + ".attributesBlender")
+    seg = mc.createNode("multiplyDivide",
+                        n="{}_Leg_stretch_segments".format(side))
+    mc.setAttr(seg + ".input1X", rest_calf)
+    mc.setAttr(seg + ".input1Y", rest_ankle)
+    mc.connectAttr(gate + ".output", seg + ".input2X")
+    mc.connectAttr(gate + ".output", seg + ".input2Y")
+    mc.connectAttr(seg + ".outputX", ik_calf + ".translateX")
+    mc.connectAttr(seg + ".outputY", ik_ankle + ".translateX")
+
+    # the DRIVER chain blends rotations; its lengths must stretch too or
+    # the BN chain (constrained to DRIVER) never sees it
+    for ik_j, drv_j, ch in ((ik_calf, "{}_Calf_DRIVER_JNT".format(side), "X"),
+                            (ik_ankle, "{}_Ankle_DRIVER_JNT".format(side), "Y")):
+        if mc.objExists(drv_j):
+            mc.connectAttr(seg + ".output" + ch, drv_j + ".translateX",
+                           force=True)
+    logger.info("Leg stretch added for side %s (rest length %.2f)",
+                side, rest_len)
+    return True
+
+
+def build_leg(side, twist="none", stretch=False):
     missing = _missing(side, ("Thigh", "Calf", "Ankle", "Ball", "Toe"))
     if missing:
         _redirect_missing(missing)
@@ -296,6 +381,9 @@ def build_leg(side, twist="none"):
                _jnt(side, "Toe"), heel])
     rig_op_reverse_foot.build_reverse_foot(side)
 
+    if stretch:
+        _add_leg_stretch(side)
+
     grp = _module_grp(side, "Leg")
     # everything the leg builders leave at world level belongs to the module.
     # NOT the ReverseFoot_GRP: the reverse-foot tool parents it under the
@@ -304,7 +392,8 @@ def build_leg(side, twist="none"):
     for orphan in ("{}_Leg_ATRIBUTES_GRP", "{}_Leg_PV_WorldSpace_LOC",
                    "{}_Foot_CON", "{}_Heel_GUIDE"):
         _into_group(orphan.format(side), grp)
-    extras = {"twist": twist, "twists_driven": _add_twist(side, "Leg", twist)}
+    extras = {"twist": twist, "stretch": bool(stretch),
+              "twists_driven": _add_twist(side, "Leg", twist)}
     scene_meta.record("leg_" + side, nodes=[grp], info=extras)
     logger.info("Leg setup complete for side %s (%s)", side, extras)
     return [grp]
