@@ -431,76 +431,6 @@ class ToolsetTab(QtWidgets.QWidget):
         return result
 
 
-class WorkflowTab(ToolsetTab):
-    """Adaptive workflow tab: a checklist of pipeline steps read from the
-    scene's TOOLSET_META node. Done steps show when and what they built,
-    the next step is highlighted, and clicking any row jumps to that step's
-    tool with its parameters preset."""
-
-    _STYLE = {
-        "done": "QPushButton { text-align: left; color: #8bc34a; border: none;"
-                " padding: 2px 6px; }",
-        "next": "QPushButton { text-align: left; color: #ffc857; border: 1px"
-                " solid #ffc857; border-radius: 3px; padding: 2px 6px;"
-                " font-weight: bold; }",
-        "todo": "QPushButton { text-align: left; color: #9a9a9a; border: none;"
-                " padding: 2px 6px; }",
-    }
-
-    def __init__(self, script_path, navigate=None, parent=None):
-        super(WorkflowTab, self).__init__(script_path, parent)
-        self._navigate = navigate
-        self.steps_box = QtWidgets.QGroupBox("Scene Progress")
-        self.steps_layout = QtWidgets.QVBoxLayout(self.steps_box)
-        self.steps_layout.setContentsMargins(6, 4, 6, 6)
-        self.steps_layout.setSpacing(1)
-        self.layout().insertWidget(0, self.steps_box)
-        self.refresh_steps()
-
-    def refresh_steps(self) -> None:
-        while self.steps_layout.count():
-            item = self.steps_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-        try:
-            from modules.rig.Lib import scene_meta
-            order = scene_meta.STEP_ORDER
-            next_step, _ = scene_meta.next_step()
-            entries = {step: scene_meta.info(step) for step, _ in order}
-            links = {step: scene_meta.linked(step) for step, _ in order}
-        except Exception:
-            logger.warning("workflow steps unavailable", exc_info=True)
-            self.steps_box.setVisible(False)
-            return
-        self.steps_box.setVisible(True)
-        for step, label in order:
-            entry = entries.get(step)
-            if entry:
-                state, prefix = "done", "[done] "
-                tip = "Done {}".format(entry.get("time", ""))
-                if links.get(step):
-                    tip += "  ->  " + ", ".join(links[step])
-            elif step == next_step:
-                state, prefix = "next", ">  "
-                tip = "Suggested next step. Click to open its tool."
-            else:
-                state, prefix = "todo", "[    ] "
-                tip = "Click to open this step's tool."
-            btn = QtWidgets.QPushButton(prefix + label)
-            btn.setStyleSheet(self._STYLE[state])
-            btn.setCursor(QtCore.Qt.PointingHandCursor)
-            btn.setToolTip(tip)
-            btn.clicked.connect(
-                lambda checked=False, st=step: self._go(st)
-            )
-            self.steps_layout.addWidget(btn)
-        self._resize_to_fit()
-
-    def _go(self, step: str) -> None:
-        if self._navigate is not None:
-            self._navigate(step)
-
-
 class ToolsetMaster(MayaQWidgetDockableMixin, QtWidgets.QDialog):
     """
     Main dockable window containing the ToolsetMaster UI.
@@ -546,10 +476,7 @@ class ToolsetMaster(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         self.tabs = {}
         for label, category in self.tab_categories.items():
             path = Config.get_tool_path(category)
-            if label == "Workflow":
-                self.tabs[label] = WorkflowTab(path, navigate=self._navigate_step)
-            else:
-                self.tabs[label] = ToolsetTab(path)
+            self.tabs[label] = ToolsetTab(path)
 
         for label, tab in self.tabs.items():
             category = self.tab_categories[label]
@@ -566,28 +493,7 @@ class ToolsetMaster(MayaQWidgetDockableMixin, QtWidgets.QDialog):
         self.tab_widget.currentChanged.connect(self._on_tab_changed)
 
     def _on_tab_changed(self, index: int) -> None:
-        page = self.tab_widget.widget(index)
-        if isinstance(page, WorkflowTab):
-            page.refresh_steps()
-        page._resize_to_fit()
-
-    def _navigate_step(self, step: str) -> None:
-        """Jump to a workflow step's tool with its parameters preset."""
-        try:
-            from modules.rig.Lib import scene_meta
-            tab_name, tool, presets = scene_meta.STEP_TOOLS.get(
-                step, (None, None, {}))
-        except Exception:
-            logger.warning("cannot navigate step %r", step, exc_info=True)
-            return
-        if not tool or tab_name not in self.tabs:
-            return
-        tab = self.tabs[tab_name]
-        self.tab_widget.setCurrentWidget(tab)
-        idx = tab.script_combobox.findData(tool)
-        if idx >= 0:
-            tab.script_combobox.setCurrentIndex(idx)
-            tab.apply_presets(presets)
+        self.tab_widget.widget(index)._resize_to_fit()
 
     def create_layout(self) -> None:
         main_layout = QtWidgets.QVBoxLayout(self)
@@ -640,10 +546,6 @@ class ToolsetMaster(MayaQWidgetDockableMixin, QtWidgets.QDialog):
 
             if result and hasattr(result, "show"):
                 result.show()
-
-            wf = self.tabs.get("Workflow")
-            if isinstance(wf, WorkflowTab):
-                wf.refresh_steps()
 
         except ImportError as e:
             cmds.warning(f"Error importing {selected_script}: {e}")
