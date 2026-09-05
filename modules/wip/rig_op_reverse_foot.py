@@ -133,6 +133,60 @@ def build_reverse_foot(side="L"):
         mc.connectAttr(auto, pma + ".input1D[1]")
         mc.connectAttr(pma + ".output1D", piv + ".rotateX")
 
+    _build_roll_pad(side, name, ctl)
+
     mc.select(ctl)
     logger.debug("Built reverse foot %s", top)
     return ctl
+
+
+def _build_roll_pad(side, name, ctl):
+    """2D slider pad for the foot roll (pattern from the Robin rig).
+
+    A bounds rectangle floats beside the foot; the puck inside is limited
+    to +/-2 in X and Z (Y locked). Drag back = heel roll, forward = ball
+    roll then over the toe (through the control's Roll + RollBreak), drag
+    sideways = bank. The pad follows the foot control.
+    """
+    mirror = -1.0 if side.upper().startswith("R") else 1.0
+    pos = mc.xform(ctl, q=True, ws=True, t=True)
+
+    holder = mc.group(empty=True, name="{}_RollPad_GRP".format(name))
+    mc.xform(holder, ws=True, t=(pos[0] + mirror * 8.0, pos[1], pos[2]))
+    mc.parentConstraint(ctl, holder, maintainOffset=True)
+
+    bounds = mc.curve(name="{}_RollPad_bounds".format(name), degree=1,
+                      point=[(-2.2, 0, -2.2), (2.2, 0, -2.2), (2.2, 0, 2.2),
+                             (-2.2, 0, 2.2), (-2.2, 0, -2.2)])
+    bounds = mc.parent(bounds, holder, relative=True)[0]
+    mc.setAttr(bounds + ".overrideEnabled", 1)
+    mc.setAttr(bounds + ".overrideColor", 6)
+    for a in ("tx", "ty", "tz", "rx", "ry", "rz", "sx", "sy", "sz"):
+        mc.setAttr("{}.{}".format(bounds, a), lock=True)
+
+    puck = mc.curve(name="{}_RollPad_CON".format(name), degree=1,
+                    point=[(0, 0, -0.6), (0.6, 0, 0), (0, 0, 0.6),
+                           (-0.6, 0, 0), (0, 0, -0.6)])
+    puck = mc.parent(puck, holder, relative=True)[0]
+    mc.setAttr(puck + ".overrideEnabled", 1)
+    mc.setAttr(puck + ".overrideColor", 17)
+    mc.transformLimits(puck, tx=(-2, 2), etx=(True, True),
+                       tz=(-2, 2), etz=(True, True))
+    for a in ("ty", "rx", "ry", "rz", "sx", "sy", "sz"):
+        mc.setAttr("{}.{}".format(puck, a), lock=True, keyable=False)
+
+    # forward (+Z) rolls onto ball/toe, back (-Z) rocks the heel:
+    # 2 units of travel -> 70 deg of Roll (covers the 35 break + toe)
+    roll_gain = mc.createNode("multDoubleLinear",
+                              n="{}_RollPad_rollGain".format(name))
+    mc.setAttr(roll_gain + ".input2", 35.0)
+    mc.connectAttr(puck + ".translateZ", roll_gain + ".input1")
+    mc.connectAttr(roll_gain + ".output", ctl + ".Roll")
+    # sideways banks (mirrored so both feet bank outward the same way)
+    bank_gain = mc.createNode("multDoubleLinear",
+                              n="{}_RollPad_bankGain".format(name))
+    mc.setAttr(bank_gain + ".input2", 25.0 * mirror)
+    mc.connectAttr(puck + ".translateX", bank_gain + ".input1")
+    mc.connectAttr(bank_gain + ".output", ctl + ".Bank")
+    logger.debug("Built roll pad %s", holder)
+    return holder

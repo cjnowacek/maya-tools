@@ -369,6 +369,37 @@ def _add_leg_stretch(side):
     return True
 
 
+def _fix_leg_pv_and_ghosts(side):
+    """Repair what the reverse foot leaves behind in the leg IKFK build.
+
+    The reverse foot reparents the leg IK handle out of {side}_Leg_ik_CON,
+    leaving that control (and its rotate companion) visible but dead - yet
+    still owning the pole vector's leg-space locator, so PV space "leg"
+    follows nothing. Move the locator under the foot control, hide the
+    ghosts, and trim the space enum to the two spaces that exist.
+    """
+    loc = "{}_Leg_PV_LegSpace_LOC".format(side)
+    foot = "{}_Foot_CON".format(side)
+    if mc.objExists(loc) and mc.objExists(foot):
+        cur = (mc.listRelatives(loc, parent=True) or [None])[0]
+        if cur != foot:
+            mc.parent(loc, foot)
+    for ghost in ("{}_Leg_ik_CON".format(side),
+                  "{}Leg_ik_rotate_CON_grp".format(side)):
+        if mc.objExists(ghost):
+            try:
+                mc.setAttr(ghost + ".visibility", 0)
+            except RuntimeError:
+                pass
+    pv = "{}_Leg_PV_CON".format(side)
+    if (mc.objExists(pv)
+            and mc.attributeQuery("SpaceSwitch", node=pv, exists=True)):
+        enum = (mc.attributeQuery("SpaceSwitch", node=pv, listEnum=True)
+                or [""])[0]
+        if "pelvis" in enum:
+            mc.addAttr(pv + ".SpaceSwitch", edit=True, enumName="world:leg")
+
+
 def build_leg(side, twist="none", stretch=False):
     missing = _missing(side, ("Thigh", "Calf", "Ankle", "Ball", "Toe"))
     if missing:
@@ -383,6 +414,8 @@ def build_leg(side, twist="none", stretch=False):
 
     if stretch:
         _add_leg_stretch(side)
+
+    _fix_leg_pv_and_ghosts(side)
 
     grp = _module_grp(side, "Leg")
     # everything the leg builders leave at world level belongs to the module.
