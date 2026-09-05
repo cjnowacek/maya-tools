@@ -454,8 +454,22 @@ def build_foot(side):
     rig_op_reverse_foot.build_reverse_foot(side)
     _fix_leg_pv_and_ghosts(side)
     grp = _module_grp(side, "Leg")
-    for orphan in ("{}_Foot_CON", "{}_Heel_GUIDE"):
-        _into_group(orphan.format(side), grp)
+    for node in ("{}_Foot_CON".format(side),
+                 "{}_Foot_RollPad_GRP".format(side),
+                 "{}_Foot_RollRing_GRP".format(side)):
+        _into_group(node, grp)
+    # the foot has consumed the placement guides (heel + bank edges): hide
+    # them so they do not float in the finished rig. A fallback-created
+    # {side}_Heel_GUIDE is tucked under the module group and hidden too.
+    for guide in ("{}_Heel_GD".format(side), "{}_Heel_GUIDE".format(side),
+                  "{}_BankInner_GD".format(side), "{}_BankOuter_GD".format(side)):
+        if mc.objExists(guide):
+            if guide.endswith("_GUIDE"):
+                _into_group(guide, grp)
+            try:
+                mc.setAttr(guide + ".visibility", 0)
+            except RuntimeError:
+                pass
     scene_meta.record("foot_" + side, nodes=["{}_Foot_CON".format(side)])
     logger.info("Foot setup complete for side %s", side)
     return ["{}_Foot_CON".format(side)]

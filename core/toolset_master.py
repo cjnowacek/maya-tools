@@ -627,7 +627,13 @@ def show_ui() -> ToolsetMaster:
                 # deleted" from the mixin's close(); skip those
                 if not _wrapper_is_valid(widget):
                     continue
-                if isinstance(widget, ToolsetMaster):
+                # match by CLASS NAME, not isinstance: importlib.reload gives
+                # ToolsetMaster a new class object, so old instances fail an
+                # isinstance check and would be left alive - their dead
+                # wrappers then fire mayaMixin callbacks (the recurring
+                # "Internal C++ object already deleted" at mixin line 462)
+                if type(widget).__name__ == "ToolsetMaster":
+                    widget.setParent(None)
                     widget.close()
                     widget.deleteLater()
             except RuntimeError:
