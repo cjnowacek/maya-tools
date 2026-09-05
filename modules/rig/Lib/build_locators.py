@@ -96,66 +96,119 @@ def build_guides(side="L"):
 
 
 AXIS_TRIPOD = (
-    ("X", (1, 0, 0), 13),   # red   = bone direction (aims at the child)
-    ("Y", (0, 1, 0), 14),   # green
-    ("Z", (0, 0, 1), 6),    # blue  = front reference
+    ("X", (1, 0, 0), 13, (1.0, 0.10, 0.10)),   # red = bone direction
+    ("Y", (0, 1, 0), 14, (0.15, 0.90, 0.20)),  # green
+    ("Z", (0, 0, 1), 6, (0.15, 0.35, 1.0)),    # blue = front reference
 )
 
 
-AXIS_WIDTH = 3.0    # curve lineWidth: thin default lines are hard to read
+AXIS_WIDTH = 3.0        # legacy curve lineWidth (fallback shapes only)
+AXIS_SHAFT = 0.045      # shaft radius as a fraction of axis length
+AXIS_HEAD = 0.28        # cone length as a fraction of axis length
+
+
+def _axis_shader(rgb):
+    """Shared unlit shader per axis color (created once, reused)."""
+    name = "guideAxis_{}_{}_{}_SS".format(*[int(round(c * 100)) for c in rgb])
+    sg = name + "SG"
+    if not mc.objExists(sg):
+        shader = mc.shadingNode("surfaceShader", asShader=True, name=name)
+        mc.setAttr(shader + ".outColor", *rgb, type="double3")
+        sg = mc.sets(name=sg, renderable=True, noSurfaceShader=True,
+                     empty=True)
+        mc.connectAttr(shader + ".outColor", sg + ".surfaceShader",
+                       force=True)
+    return sg
+
+
+def _axis_arrow(name, vec, size, color, rgb):
+    """One solid axis arrow: cylinder shaft + cone tip, pointing down vec.
+
+    Real geometry rather than a line, so the axis reads from any angle and
+    at any zoom. Returns the arrow's transform (caller shape-parents it).
+    """
+    shaft_len = size * (1.0 - AXIS_HEAD)
+    head_len = size * AXIS_HEAD
+    radius = size * AXIS_SHAFT
+
+    shaft = mc.polyCylinder(name=name + "_shaft", radius=radius,
+                            height=shaft_len, subdivisionsAxis=12,
+                            subdivisionsHeight=1, subdivisionsCaps=0,
+                            constructionHistory=False)[0]
+    # polyCylinder/polyCone build along +Y: move up by half, then aim
+    mc.move(0, shaft_len * 0.5, 0, shaft, absolute=True)
+    head = mc.polyCone(name=name + "_head", radius=radius * 2.6,
+                       height=head_len, subdivisionsAxis=12,
+                       subdivisionsHeight=1, subdivisionsCap=0,
+                       constructionHistory=False)[0]
+    mc.move(0, shaft_len + head_len * 0.5, 0, head, absolute=True)
+
+    arrow = mc.polyUnite(shaft, head, name=name,
+                         constructionHistory=False)[0]
+    mc.delete(arrow, constructionHistory=True)
+    mc.xform(arrow, pivots=(0, 0, 0))
+    # rotate +Y onto the requested axis
+    if vec == (1, 0, 0):
+        mc.rotate(0, 0, -90, arrow, absolute=True)
+    elif vec == (0, 0, 1):
+        mc.rotate(90, 0, 0, arrow, absolute=True)
+    mc.makeIdentity(arrow, apply=True, translate=True, rotate=True,
+                    scale=True)
+    shape = mc.listRelatives(arrow, shapes=True, fullPath=True)[0]
+    # Wireframe color from the index override; SHADED color needs a real
+    # shader (display overrides leave a shaded mesh grey). surfaceShader is
+    # unlit, so the axis reads as a pure flat color in any lighting.
+    mc.setAttr(shape + ".overrideEnabled", 1)
+    mc.setAttr(shape + ".overrideRGBColors", 1)
+    mc.setAttr(shape + ".overrideColorRGB", *rgb)
+    mc.setAttr(shape + ".overrideColor", color)
+    mc.setAttr(shape + ".castsShadows", 0)
+    mc.setAttr(shape + ".receiveShadows", 0)
+    mc.sets(shape, edit=True, forceElement=_axis_shader(rgb))
+    return arrow
 
 
 def _add_axis_tripod(loc, size=3.0, width=AXIS_WIDTH):
-    """RGB axis lines parented as SHAPES under the guide transform, so the
+    """RGB axis arrows parented as SHAPES under the guide transform, so the
     guide's orientation is readable at a glance without extra nodes."""
-    for label, vec, color in AXIS_TRIPOD:
-        crv = mc.curve(degree=1, point=[(0, 0, 0),
-                                        tuple(v * size for v in vec)])
-        shape = mc.listRelatives(crv, shapes=True)[0]
+    for label, vec, color, rgb in AXIS_TRIPOD:
+        arrow = _axis_arrow("{}_axis{}".format(loc, label), vec, size,
+                            color, rgb)
+        shape = mc.listRelatives(arrow, shapes=True, fullPath=True)[0]
         shape = mc.rename(shape, "{}_axis{}Shape".format(loc, label))
-        mc.setAttr(shape + ".overrideEnabled", 1)
-        mc.setAttr(shape + ".overrideColor", color)
-        try:                       # lineWidth needs Maya 2019+ and a VP2 draw
-            mc.setAttr(shape + ".lineWidth", width)
-        except RuntimeError:
-            pass
         mc.parent(shape, loc, relative=True, shape=True)
-        mc.delete(crv)
+        mc.delete(arrow)
 
 
 def set_axis_size(size=3.0, width=AXIS_WIDTH, top="Guides"):
-    """Rescale every guide's axis tripod in place.
+    """Resize every guide's axis arrows in place.
 
-    The CVs are rewritten rather than the transform scaled, so guide
-    scale stays 1 and nothing downstream inherits a scale factor. The
-    locator's own crosshair is matched to the same size.
+    Mesh arrows are rebuilt at the new size rather than scaled, so the
+    guide transform stays at scale 1 (nothing downstream inherits a
+    factor) and cone tips keep their proportions. The locator crosshair
+    is matched to the same size.
     """
     changed = 0
     for loc in mc.listRelatives(top, allDescendents=True, type="transform",
                                 fullPath=True) or []:
         shapes = mc.listRelatives(loc, shapes=True, fullPath=True) or []
+        if not any(mc.nodeType(sh) == "locator" for sh in shapes):
+            continue
+        short = loc.split("|")[-1]
         for shape in shapes:
-            short = shape.split("|")[-1]
+            sh_short = shape.split("|")[-1]
             if mc.nodeType(shape) == "locator":
+                # the crosshair is redundant now that solid arrows show the
+                # frame, but the locator shape is how every tool RECOGNISES
+                # a guide (listRelatives type="locator"), so keep it as a
+                # tiny selectable nub rather than deleting it
                 for axis in "XYZ":
                     mc.setAttr("{}.localScale{}".format(shape, axis),
-                               size * 0.35)
-                continue
-            if "_axis" not in short:
-                continue
-            label = short.split("_axis")[-1].replace("Shape", "")
-            vec = dict((a, v) for a, v, _c in AXIS_TRIPOD).get(label)
-            if not vec:
-                continue
-            mc.setAttr(shape + ".controlPoints[0]", 0, 0, 0, type="double3")
-            mc.setAttr(shape + ".controlPoints[1]",
-                       vec[0] * size, vec[1] * size, vec[2] * size,
-                       type="double3")
-            try:
-                mc.setAttr(shape + ".lineWidth", width)
-            except RuntimeError:
-                pass
-            changed += 1
+                               size * 0.04)
+            elif "_axis" in sh_short:
+                mc.delete(shape)
+                changed += 1
+        _add_axis_tripod(short, size, width)
     return changed
 
 
