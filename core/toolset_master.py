@@ -25,10 +25,10 @@ from typing import Dict, List, Optional
 
 try:
     from PySide6 import QtCore, QtWidgets  # Maya 2025+
-    from shiboken6 import wrapInstance
+    from shiboken6 import wrapInstance, isValid as _wrapper_is_valid
 except ImportError:
     from PySide2 import QtCore, QtWidgets  # Maya 2024 and earlier
-    from shiboken2 import wrapInstance
+    from shiboken2 import wrapInstance, isValid as _wrapper_is_valid
 
 from maya import cmds
 from maya import OpenMayaUI
@@ -655,9 +655,17 @@ class ToolsetMaster(MayaQWidgetDockableMixin, QtWidgets.QDialog):
 def show_ui() -> ToolsetMaster:
     try:
         for widget in QtWidgets.QApplication.topLevelWidgets():
-            if isinstance(widget, ToolsetMaster):
-                widget.close()
-                widget.deleteLater()
+            try:
+                # a wrapper whose C++ side died with its deleted
+                # workspaceControl raises "Internal C++ object already
+                # deleted" from the mixin's close(); skip those
+                if not _wrapper_is_valid(widget):
+                    continue
+                if isinstance(widget, ToolsetMaster):
+                    widget.close()
+                    widget.deleteLater()
+            except RuntimeError:
+                pass
         # Closing the dialog does NOT remove its workspaceControl wrapper:
         # every relaunch would otherwise leave a ghost window behind (and the
         # user ends up looking at a stale copy while resizes go to the new
