@@ -89,6 +89,15 @@ TOOL_META = {
                        "when the foot control reaches past full extension. "
                        "FK mode is unaffected.",
         },
+        "foot_build": {
+            "label": "build",
+            "group": "Feet",
+            "radio": True,
+            "choices": ["none", "reverse"],
+            "tooltip": "Reverse foot with heel break, edge banks, roll "
+                       "ring, pedal pad, and pivot wedges. Requires the "
+                       "leg build; attaches to its IK at the end.",
+        },
         "torso_build": {
             "label": "build",
             "group": "Torso",
@@ -112,7 +121,7 @@ MODULE_SEGMENTS = {
 
 def main(sides="both", arm_build="ikfk", arm_twist="none",
          leg_build="ikfk", leg_twist="none", leg_stretch=False,
-         torso_build="none", *args):
+         foot_build="reverse", torso_build="none", *args):
     side_list = ["L", "R"] if (sides or "both") == "both" else [sides]
     results = {}
     for side in side_list:
@@ -121,6 +130,8 @@ def main(sides="both", arm_build="ikfk", arm_twist="none",
         if leg_build != "none":
             results["leg_" + side] = build_leg(side, leg_twist,
                                                bool(leg_stretch))
+        if foot_build != "none":
+            results["foot_" + side] = build_foot(side)
     if torso_build != "none":
         results["torso"] = build_torso(torso_build)
     if not results:
@@ -407,29 +418,47 @@ def build_leg(side, twist="none", stretch=False):
         return None
 
     rig_op_leg_ikfk_switch.RigOps_LegIKFKSwitch(side)
-    heel = _heel_guide(side)
-    mc.select([_jnt(side, "Ankle"), _jnt(side, "Ball"),
-               _jnt(side, "Toe"), heel])
-    rig_op_reverse_foot.build_reverse_foot(side)
 
     if stretch:
         _add_leg_stretch(side)
 
-    _fix_leg_pv_and_ghosts(side)
-
     grp = _module_grp(side, "Leg")
-    # everything the leg builders leave at world level belongs to the module.
-    # NOT the ReverseFoot_GRP: the reverse-foot tool parents it under the
-    # foot control (that is what makes the control move the leg IK), so it
-    # travels with {side}_Foot_CON.
-    for orphan in ("{}_Leg_ATRIBUTES_GRP", "{}_Leg_PV_WorldSpace_LOC",
-                   "{}_Foot_CON", "{}_Heel_GUIDE"):
+    for orphan in ("{}_Leg_ATRIBUTES_GRP", "{}_Leg_PV_WorldSpace_LOC"):
         _into_group(orphan.format(side), grp)
     extras = {"twist": twist, "stretch": bool(stretch),
               "twists_driven": _add_twist(side, "Leg", twist)}
     scene_meta.record("leg_" + side, nodes=[grp], info=extras)
     logger.info("Leg setup complete for side %s (%s)", side, extras)
     return [grp]
+
+
+# --------------------------------------------------------------------- feet
+def build_foot(side):
+    """Foot module: built AFTER the leg, attaches to its IK at the end.
+
+    Reverse foot (heel break, edge banks from the _GD guides), roll ring,
+    pedal pad, pivot wedges - then the leg handover repairs (PV leg space,
+    ghost controls).
+    """
+    if not scene_meta.done("leg_" + side):
+        mc.warning("Foot needs the leg first. Redirect: run Body Setup "
+                   "with the {} leg build enabled.".format(side))
+        return None
+    missing = _missing(side, ("Ankle", "Ball", "Toe"))
+    if missing:
+        _redirect_missing(missing)
+        return None
+    heel = _heel_guide(side)
+    mc.select([_jnt(side, "Ankle"), _jnt(side, "Ball"),
+               _jnt(side, "Toe"), heel])
+    rig_op_reverse_foot.build_reverse_foot(side)
+    _fix_leg_pv_and_ghosts(side)
+    grp = _module_grp(side, "Leg")
+    for orphan in ("{}_Foot_CON", "{}_Heel_GUIDE"):
+        _into_group(orphan.format(side), grp)
+    scene_meta.record("foot_" + side, nodes=["{}_Foot_CON".format(side)])
+    logger.info("Foot setup complete for side %s", side)
+    return ["{}_Foot_CON".format(side)]
 
 
 # -------------------------------------------------------------------- torso

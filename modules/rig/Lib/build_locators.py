@@ -24,16 +24,19 @@ SPINE_GUIDES = [
     ("Chest_BN", (0, 135, 0)),
 ]
 
+# limb chains are STRAIGHT lines: rotate the chain root and the whole
+# limb aims as one piece. IK bend direction comes from preferred angles
+# set at skeleton-build time, not from pre-bent guides.
 ARM_GUIDES = [
-    ("Clavicle_BN", (4, 142, 2)),
+    ("Clavicle_BN", (4, 142, 0)),
     ("Shoulder_BN", (16, 142, 0)),
-    ("Elbow_BN", (42, 142, -4)),
+    ("Elbow_BN", (42, 142, 0)),
     ("Wrist_BN", (68, 142, 0)),
 ]
 
 LEG_GUIDES = [
     ("Thigh_BN", (10, 92, 0)),
-    ("Calf_BN", (10, 50, 4)),
+    ("Calf_BN", (10, 50, 0)),
     ("Ankle_BN", (10, 10, 0)),
     ("Ball_BN", (10, 2, 12)),
     ("Toe_BN", (10, 2, 20)),
@@ -88,6 +91,30 @@ def build_guides(side="L"):
     mc.select(top)
     logger.debug("Built guides: %s", made)
     return made
+
+
+def straighten_limb_guides(side="L"):
+    """Project each limb's mid guide onto the root->end line, keeping the
+    user's endpoint placement: the chain becomes a straight line that can
+    be rotated in place as one piece."""
+    def project(root, mid, end):
+        if not all(mc.objExists(n) for n in (root, mid, end)):
+            return False
+        a = mc.xform(root, q=True, ws=True, t=True)
+        b = mc.xform(mid, q=True, ws=True, t=True)
+        c = mc.xform(end, q=True, ws=True, t=True)
+        d = [c[i] - a[i] for i in range(3)]
+        l2 = sum(v * v for v in d) or 1.0
+        t = sum((b[i] - a[i]) * d[i] for i in range(3)) / l2
+        mc.xform(mid, ws=True, t=[a[i] + d[i] * t for i in range(3)])
+        return True
+    pre = "{}_".format(side.upper()[0])
+    done = []
+    if project(pre + "Thigh_BN", pre + "Calf_BN", pre + "Ankle_BN"):
+        done.append("leg")
+    if project(pre + "Shoulder_BN", pre + "Elbow_BN", pre + "Wrist_BN"):
+        done.append("arm")
+    return done
 
 
 def ensure_foot_pivot_guides(side="L", top="Guides"):

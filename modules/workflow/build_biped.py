@@ -99,6 +99,9 @@ def build_guides_phase(guides_group="Guides"):
         added = []
         for side in ("L", "R"):
             added += build_locators.ensure_foot_pivot_guides(side, existing)
+        # limbs are NOT auto-straightened: the user places the bend, and the
+        # skeleton reads it as the fold direction. straighten_limb_guides()
+        # in Lib/build_locators is there for manual use if wanted.
         msg = ("Guides already exist ({}). Place them, then Run again "
                "to build the skeleton.".format(existing))
         if added:
@@ -141,12 +144,85 @@ def _build_joints(guide, parent_joint):
 
 
 def _orient_chain(root):
+    # secondary axis must not be parallel to the bone: a straight vertical
+    # leg with "yup" is singular (the iteration-1 lesson), so pick the up
+    # axis from the chain's dominant direction
+    end = root
+    kids = mc.listRelatives(root, allDescendents=True, type="joint")
+    if kids:
+        end = kids[0]
+    d = [a - b for a, b in zip(mc.xform(end, q=True, ws=True, t=True),
+                               mc.xform(root, q=True, ws=True, t=True))]
+    sao = "zup" if abs(d[1]) >= max(abs(d[0]), abs(d[2])) else "yup"
     mc.select(root)
-    mc.joint(edit=True, orientJoint="xyz", secondaryAxisOrient="yup",
+    mc.joint(edit=True, orientJoint="xyz", secondaryAxisOrient=sao,
              children=True, zeroScaleOrient=True)
     for jnt in mc.listRelatives(root, allDescendents=True, type="joint") or [root]:
         if not mc.listRelatives(jnt, children=True, type="joint"):
             mc.setAttr(jnt + ".jointOrient", 0, 0, 0)
+
+
+# bend joint -> (end joint whose swing defines the bend, desired world Z
+# direction of that swing under knee-forward / elbow-back convention)
+BEND_JOINTS = {
+    "Calf": ("Ankle", -1.0),    # knee vertex forward: ankle swings back
+    "Elbow": ("Wrist", +1.0),   # elbow vertex back: wrist swings forward
+}
+
+
+def _set_preferred_angles(roots):
+    """Straight chains give IK no bend direction; find it empirically.
+
+    For each bend joint, test-rotate each candidate axis/sign by 10 deg,
+    measure which way the end joint's world Z moves, keep the combination
+    matching the anatomical convention, and store it as the preferred
+    angle. Duplicated IK chains inherit it.
+    """
+    joints = set()
+    for root in roots:
+        joints.add(root.split("|")[-1])
+        for j in mc.listRelatives(root, allDescendents=True, type="joint") or []:
+            joints.add(j.split("|")[-1])
+    for part, (end_part, want_z) in BEND_JOINTS.items():
+        for j in sorted(joints):
+            if not j.endswith("_{}_BN_JNT".format(part)):
+                continue
+            side = j.split("_")[0]
+            end = "{}_{}_BN_JNT".format(side, end_part)
+            if end not in joints:
+                continue
+            # the USER'S placed bend wins: a bent guide chain leaves its
+            # bend in the joint orient, and that is the direction the knee
+            # or elbow should keep folding
+            jo_y = mc.getAttr(j + ".jointOrientY")
+            jo_z = mc.getAttr(j + ".jointOrientZ")
+            if abs(jo_y) > 1.0 or abs(jo_z) > 1.0:
+                axis = "Y" if abs(jo_y) >= abs(jo_z) else "Z"
+                jo = jo_y if axis == "Y" else jo_z
+                sign = 1.0 if jo > 0 else -1.0
+                amount = max(20.0, abs(jo))
+                mc.setAttr("{}.preferredAngle{}".format(j, axis),
+                           sign * amount)
+                logger.debug("preferred angle %s.%s = %s (from placed bend)",
+                             j, axis, sign * amount)
+                continue
+            # truly straight chain: fall back to the anatomical convention,
+            # found empirically (test-rotate, measure the end's world swing)
+            base = mc.xform(end, q=True, ws=True, t=True)
+            best = None
+            for axis in ("Y", "Z"):
+                for sign in (1.0, -1.0):
+                    mc.setAttr("{}.rotate{}".format(j, axis), sign * 10.0)
+                    moved = mc.xform(end, q=True, ws=True, t=True)
+                    mc.setAttr("{}.rotate{}".format(j, axis), 0.0)
+                    dz = moved[2] - base[2]
+                    score = dz * want_z
+                    if best is None or score > best[0]:
+                        best = (score, axis, sign)
+            _, axis, sign = best
+            mc.setAttr("{}.preferredAngle{}".format(j, axis), sign * 20.0)
+            logger.debug("preferred angle %s.%s = %s (convention)",
+                         j, axis, sign * 20.0)
 
 
 def _add_twist_joints(roots, count):
@@ -214,6 +290,7 @@ def build_skeleton(mirror=True, guides_group="Guides", twist_joints=2):
             _orient_chain(jnt_root)
             roots.append(jnt_root)
 
+    _set_preferred_angles(roots)
     twists = _add_twist_joints(roots, twist_joints)
 
     if mirror:
