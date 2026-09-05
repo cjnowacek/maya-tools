@@ -214,6 +214,9 @@ def straighten_limb_guides(side="L"):
         l2 = sum(v * v for v in d) or 1.0
         t = sum((b[i] - a[i]) * d[i] for i in range(3)) / l2
         mc.xform(mid, ws=True, t=[a[i] + d[i] * t for i in range(3)])
+        # end is a CHILD of mid in the guide chain, so moving mid dragged
+        # it: restore its snapshot or the line we projected onto is gone
+        mc.xform(end, ws=True, t=c)
         return True
     pre = "{}_".format(side.upper()[0])
     done = []
