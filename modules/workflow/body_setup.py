@@ -280,8 +280,8 @@ def build_arm(side, twist="none"):
 
 # --------------------------------------------------------------------- legs
 def _heel_guide(side):
-    for candidate in ("{}_Heel".format(side), "{}_Heel_BN".format(side),
-                      "{}_Heel_GUIDE".format(side)):
+    for candidate in ("{}_Heel_GD".format(side), "{}_Heel".format(side),
+                      "{}_Heel_BN".format(side), "{}_Heel_GUIDE".format(side)):
         if mc.objExists(candidate):
             return candidate
     ankle = mc.xform(_jnt(side, "Ankle"), q=True, ws=True, t=True)

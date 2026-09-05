@@ -39,6 +39,16 @@ LEG_GUIDES = [
     ("Toe_BN", (10, 2, 20)),
 ]
 
+# Foot PIVOT guides (_GD suffix: placement targets for the reverse foot's
+# pivots, NOT bones - the skeleton builder skips them). Heel is where the
+# foot rocks back; the bank guides are the inner/outer sole edges the foot
+# tips over sideways.
+FOOT_PIVOT_GUIDES = [
+    ("Heel_GD", (10, 0, -7)),
+    ("BankInner_GD", (6, 0, 12)),
+    ("BankOuter_GD", (14, 0, 12)),
+]
+
 
 
 
@@ -72,8 +82,29 @@ def build_guides(side="L"):
         made.append(_build_chain(SPINE_GUIDES, top))
     made.append(_build_chain(ARM_GUIDES, top, prefix=prefix, mirror=mirror))
     made.append(_build_chain(LEG_GUIDES, top, prefix=prefix, mirror=mirror))
+    made += ensure_foot_pivot_guides(side, top)
 
     scene_meta.record("guides", nodes=[top], info={"side": side})
     mc.select(top)
     logger.debug("Built guides: %s", made)
+    return made
+
+
+def ensure_foot_pivot_guides(side="L", top="Guides"):
+    """Add the foot pivot guides for a side if missing (safe to re-run,
+    including on scenes whose guides predate these)."""
+    mirror = side.upper().startswith("R")
+    prefix = "{}_".format(side.upper()[0])
+    if not mc.objExists(top):
+        top = mc.createNode("transform", name=top)
+    made = []
+    for name, pos in FOOT_PIVOT_GUIDES:
+        full = prefix + name
+        if mc.objExists(full):
+            continue
+        loc = mc.spaceLocator(n=full)[0]
+        x = -pos[0] if mirror else pos[0]
+        mc.xform(loc, ws=True, t=(x, pos[1], pos[2]))
+        loc = mc.parent(loc, top)[0]
+        made.append(loc)
     return made

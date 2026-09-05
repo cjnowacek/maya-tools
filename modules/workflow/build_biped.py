@@ -96,8 +96,15 @@ def main(action="auto", mirror=1, guides_group="Guides", twist_joints=3, *args):
 def build_guides_phase(guides_group="Guides"):
     existing = scene_meta.find("guides", name_fallback=guides_group)
     if existing:
-        mc.warning("Guides already exist ({}). Place them, then Run again "
-                   "to build the skeleton.".format(existing))
+        added = []
+        for side in ("L", "R"):
+            added += build_locators.ensure_foot_pivot_guides(side, existing)
+        msg = ("Guides already exist ({}). Place them, then Run again "
+               "to build the skeleton.".format(existing))
+        if added:
+            msg += " Added missing foot pivot guides: {}.".format(
+                ", ".join(added))
+        mc.warning(msg)
         mc.select(existing)
         return existing
     made = build_locators.build_guides("L")
@@ -111,8 +118,14 @@ def _chain_roots(guides_group):
 
 
 def _build_joints(guide, parent_joint):
-    """Recursively create a joint per guide locator, named {guide}_JNT."""
+    """Recursively create a joint per guide locator, named {guide}_JNT.
+
+    Guides ending in _GD are pivot-placement guides (heel, bank edges),
+    not bones: no joints for them.
+    """
     short = guide.split("|")[-1]
+    if short.endswith("_GD"):
+        return None
     name = short + "_JNT"
     if mc.objExists(name):
         mc.warning("{} already exists; skipping this chain.".format(name))
@@ -194,6 +207,8 @@ def build_skeleton(mirror=True, guides_group="Guides", twist_joints=2):
 
     roots = []
     for guide_root in _chain_roots(guides_group):
+        if guide_root.split("|")[-1].endswith("_GD"):
+            continue
         jnt_root = _build_joints(guide_root, None)
         if jnt_root:
             _orient_chain(jnt_root)

@@ -75,14 +75,24 @@ def build_reverse_foot(side="L"):
     ball_pos = mc.xform(ball, q=True, ws=True, t=True)
     heel_pos = mc.xform(heel, q=True, ws=True, t=True)
     toe_pos = mc.xform(toe, q=True, ws=True, t=True)
-    half_w = 0.35 * abs(toe_pos[2] - heel_pos[2]) or 4.0
     mirror = -1.0 if side.upper().startswith("R") else 1.0
+    # bank edges: PLACED guides win ({side}_BankInner/Outer_GD), estimate
+    # from foot length only when no guide exists
+    half_w = 0.35 * abs(toe_pos[2] - heel_pos[2]) or 4.0
+    inner_guide = "{}_BankInner_GD".format(side)
+    outer_guide = "{}_BankOuter_GD".format(side)
+    if mc.objExists(inner_guide):
+        inner_pos = mc.xform(inner_guide, q=True, ws=True, t=True)
+    else:
+        inner_pos = (ball_pos[0] - mirror * half_w, ball_pos[1], ball_pos[2])
+    if mc.objExists(outer_guide):
+        outer_pos = mc.xform(outer_guide, q=True, ws=True, t=True)
+    else:
+        outer_pos = (ball_pos[0] + mirror * half_w, ball_pos[1], ball_pos[2])
     inner_piv = mc.group(em=True, n="{}_InnerBank_PIV".format(name))
-    mc.xform(inner_piv, ws=True, t=(ball_pos[0] - mirror * half_w,
-                                    ball_pos[1], ball_pos[2]))
+    mc.xform(inner_piv, ws=True, t=inner_pos)
     outer_piv = mc.group(em=True, n="{}_OuterBank_PIV".format(name))
-    mc.xform(outer_piv, ws=True, t=(ball_pos[0] + mirror * half_w,
-                                    ball_pos[1], ball_pos[2]))
+    mc.xform(outer_piv, ws=True, t=outer_pos)
 
     mc.parent(ankle_piv, ball_piv)
     mc.parent(ball_piv, toe_piv)
