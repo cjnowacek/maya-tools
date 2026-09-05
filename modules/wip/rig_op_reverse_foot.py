@@ -237,10 +237,20 @@ def _build_roll_ring(side, name, ctl, ball):
     for a in ("tx", "ty", "tz", "sx", "sy", "sz"):
         mc.setAttr("{}.{}".format(ring, a), lock=True, keyable=False)
 
-    # rotation IS the value: 1:1 into the shared network. The pad (if
-    # visible) drives the same attrs, so use one or the other per shot.
-    for src, dst in (("rotateX", "Roll"), ("rotateZ", "Bank"),
-                     ("rotateY", "ToeSpin")):
+    # rotation IS the value: into the shared network. Roll (rotateX) and
+    # ToeSpin (rotateY) are gesture-consistent at 1:1 on both sides, but
+    # Bank's meaning mirrors per side: without -mirror the same visual
+    # ring tilt tips the two feet in OPPOSITE world directions (and the
+    # ring tilts opposite to its own foot's lean). With it the ring works
+    # like a steering wheel: the foot leans the way the ring leans.
+    mirror = -1.0 if side.upper().startswith("R") else 1.0
+    bank_sign = mc.createNode("multDoubleLinear",
+                              n="{}_RingBank_sign".format(name))
+    mc.setAttr(bank_sign + ".input2", -mirror)
+    mc.connectAttr(ring + ".rotateZ", bank_sign + ".input1")
+    for src, dst in ((ring + ".rotateX", "Roll"),
+                     (bank_sign + ".output", "Bank"),
+                     (ring + ".rotateY", "ToeSpin")):
         plug = "{}.{}".format(ctl, dst)
         existing = mc.listConnections(plug, s=True, d=False, plugs=True)
         if existing:
@@ -248,10 +258,10 @@ def _build_roll_ring(side, name, ctl, ball):
             pma = mc.createNode("plusMinusAverage",
                                n="{}_{}_inputSum".format(name, dst))
             mc.connectAttr(existing[0], pma + ".input1D[0]", force=True)
-            mc.connectAttr("{}.{}".format(ring, src), pma + ".input1D[1]")
+            mc.connectAttr(src, pma + ".input1D[1]")
             mc.connectAttr(pma + ".output1D", plug, force=True)
         else:
-            mc.connectAttr("{}.{}".format(ring, src), plug)
+            mc.connectAttr(src, plug)
     mc.addAttr(ctl, ln="ShowRollRing", at="bool", k=True, dv=True)
     mc.connectAttr(ctl + ".ShowRollRing", holder + ".visibility")
     logger.debug("Built roll ring %s", ring)
