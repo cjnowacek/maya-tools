@@ -8,6 +8,7 @@ from modules.rig.Lib import scene_meta
 logger = logging.getLogger(__name__)
 
 TOOL_META = {
+    "order": 99,
     "description": (
         "Report the scene's workflow state from the TOOLSET_META node.\n\n"
         "Lists every workflow step: done (with timestamp and the nodes it "

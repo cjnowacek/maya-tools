@@ -16,6 +16,7 @@ Version: 2.0.0
 License: GPL
 """
 
+import ast
 import os
 import sys
 import inspect
@@ -50,7 +51,28 @@ def format_display_name(module_name: str) -> str:
     return module_name.replace("_", " ").title()
 
 
+def _tool_order(script_path: str, module_name: str):
+    """TOOL_META['order'] read via ast (no import, no side effects)."""
+    try:
+        with open(os.path.join(script_path, module_name + ".py"),
+                  encoding="utf-8") as f:
+            tree = ast.parse(f.read())
+        for node in tree.body:
+            if (isinstance(node, ast.Assign)
+                    and getattr(node.targets[0], "id", "") == "TOOL_META"):
+                return ast.literal_eval(node.value).get("order")
+    except Exception:
+        logger.debug("order unreadable for %s", module_name, exc_info=True)
+    return None
+
+
 def list_modules(script_path: str) -> List[str]:
+    """Tool modules in a category directory.
+
+    Sorted by TOOL_META['order'] where declared (pipeline sequence, e.g.
+    the Workflow tab), alphabetically otherwise; unordered tools list after
+    ordered ones.
+    """
     if not os.path.exists(script_path):
         cmds.warning(f"Path does not exist: {script_path}")
         return []
@@ -59,7 +81,12 @@ def list_modules(script_path: str) -> List[str]:
     for file in os.listdir(script_path):
         if file.endswith(".py") and not file.startswith("__"):
             module_names.append(file.split(".")[0])
-    return module_names
+
+    def key(name):
+        order = _tool_order(script_path, name)
+        return (order if order is not None else 10 ** 6, name)
+
+    return sorted(module_names, key=key)
 
 
 class _CurrentPageTabWidget(QtWidgets.QTabWidget):

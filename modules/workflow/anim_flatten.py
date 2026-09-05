@@ -19,6 +19,7 @@ from modules.anim import export_animation_prep
 logger = logging.getLogger(__name__)
 
 TOOL_META = {
+    "order": 4,
     "description": (
         "Flatten the scene for animation export, one tool, three methods.\n\n"
         "namespace: merge the given namespace into root and import every "

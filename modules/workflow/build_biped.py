@@ -19,6 +19,7 @@ from modules.wip import rig_ops_mirror_joints
 logger = logging.getLogger(__name__)
 
 TOOL_META = {
+    "order": 1,
     "description": (
         "Build a biped in two phases, one button.\n\n"
         "auto: the scene's meta node decides. No guides yet -> builds the "

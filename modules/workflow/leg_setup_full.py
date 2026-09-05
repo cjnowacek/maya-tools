@@ -15,6 +15,7 @@ from modules.wip import rig_op_reverse_foot
 logger = logging.getLogger(__name__)
 
 TOOL_META = {
+    "order": 2,
     "description": (
         "Full leg setup: IKFK switch, pole vector, reverse foot.\n\n"
         "Runs the Leg IKFK builder (needs {side}_Thigh/Calf/Ankle_BN_JNT), "

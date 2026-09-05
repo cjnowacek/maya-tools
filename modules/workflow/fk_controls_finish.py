@@ -15,6 +15,7 @@ from modules.wip import rig_ops_create_control_colors
 logger = logging.getLogger(__name__)
 
 TOOL_META = {
+    "order": 3,
     "description": (
         "Build an FK control chain and color it, from one selected root.\n\n"
         "Expands the selected joint to its full chain (top-down), builds "
