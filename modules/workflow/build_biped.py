@@ -102,6 +102,9 @@ def build_guides_phase(guides_group="Guides"):
         # limbs are NOT auto-straightened: the user places the bend, and the
         # skeleton reads it as the fold direction. straighten_limb_guides()
         # in Lib/build_locators is there for manual use if wanted.
+        tripods, oriented = build_locators.upgrade_guide_display(existing)
+        logger.info("guide display: %d tripods added, %d guides oriented",
+                    tripods, oriented)
         msg = ("Guides already exist ({}). Place them, then Run again "
                "to build the skeleton.".format(existing))
         if added:
