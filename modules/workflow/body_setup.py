@@ -210,6 +210,11 @@ def _drive_twists_ribbon(side, module):
                 "shinRibbon": _twist_joints(side, module, lab1)}
     if not any(existing.values()):
         return 0
+    for tag, joints in existing.items():
+        if joints and len(joints) < 3:
+            mc.warning("{} has only {} twist joint(s): ribbon bend will "
+                       "look faceted (no joint at the mid control's peak). "
+                       "3+ per segment recommended.".format(tag, len(joints)))
     P = {"Thigh": mc.xform(bind[0], q=True, ws=True, t=True),
          "Knee": mc.xform(bind[1], q=True, ws=True, t=True),
          "Ankle": mc.xform(bind[2], q=True, ws=True, t=True)}

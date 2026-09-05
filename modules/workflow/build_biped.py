@@ -57,7 +57,9 @@ TOOL_META = {
             "min": 0,
             "max": 5,
             "tooltip": "Undriven twist BN joints per limb segment "
-                       "(0 = none). Body Setup drives them later.",
+                       "(0 = none). Body Setup drives them later. 3 gives "
+                       "a center joint, the minimum for ribbon bend to "
+                       "read smoothly; 2 is enough for roll-only.",
         },
     },
 }
@@ -72,7 +74,7 @@ TWIST_SEGMENTS = [
 ]
 
 
-def main(action="auto", mirror=1, guides_group="Guides", twist_joints=2, *args):
+def main(action="auto", mirror=1, guides_group="Guides", twist_joints=3, *args):
     action = (action or "auto").lower()
     mirror = bool(int(mirror))
     guides_group = guides_group or "Guides"
