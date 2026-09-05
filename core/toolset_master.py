@@ -620,7 +620,10 @@ class ToolsetMaster(MayaQWidgetDockableMixin, QtWidgets.QDialog):
 
 def show_ui() -> ToolsetMaster:
     try:
-        for widget in QtWidgets.QApplication.topLevelWidgets():
+        # allWidgets(), not topLevelWidgets(): once shown, the dialog is
+        # reparented INTO its workspaceControl and stops being top level,
+        # so the old scan missed every live instance and left them behind
+        for widget in QtWidgets.QApplication.allWidgets():
             try:
                 # a wrapper whose C++ side died with its deleted
                 # workspaceControl raises "Internal C++ object already
