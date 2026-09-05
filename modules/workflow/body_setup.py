@@ -206,8 +206,11 @@ def _drive_twists_ribbon(side, module):
     segs = MODULE_SEGMENTS[module]
     (lab0, a, b, _), (lab1, _b, c, _k) = segs
     bind = [_jnt(side, p) for p in (a, b, c)]
-    existing = {"thighRibbon": _twist_joints(side, module, lab0),
-                "shinRibbon": _twist_joints(side, module, lab1)}
+    # segment tags carry the module's own segment names (no leg tags on arms)
+    tag0 = lab0[0].lower() + lab0[1:] + "Ribbon"
+    tag1 = lab1[0].lower() + lab1[1:] + "Ribbon"
+    existing = {tag0: _twist_joints(side, module, lab0),
+                tag1: _twist_joints(side, module, lab1)}
     if not any(existing.values()):
         return 0
     for tag, joints in existing.items():
@@ -228,7 +231,8 @@ def _drive_twists_ribbon(side, module):
     rig = {"bind": bind, "plane": plane, "top": top, "glob": glob,
            "layers": (lyr, lyr)}
     out = leg_ribbon.add_ribbons("{}_{}_".format(side, module.lower()),
-                                 rig, P, mid_ctrl=True, existing=existing)
+                                 rig, P, mid_ctrl=True, existing=existing,
+                                 seg_tags=(tag0, tag1))
     return len(out["joints"]) if out else 0
 
 
@@ -293,8 +297,11 @@ def build_leg(side, twist="none"):
     rig_op_reverse_foot.build_reverse_foot(side)
 
     grp = _module_grp(side, "Leg")
-    # the reverse foot is part of the leg module
-    _into_group("{}_Foot_ReverseFoot_GRP".format(side), grp)
+    # everything the leg builders leave at world level belongs to the module
+    for orphan in ("{}_Foot_ReverseFoot_GRP", "{}_Leg_ATRIBUTES_GRP",
+                   "{}_Leg_PV_WorldSpace_LOC", "{}_Foot_CON",
+                   "{}_Heel_GUIDE"):
+        _into_group(orphan.format(side), grp)
     extras = {"twist": twist, "twists_driven": _add_twist(side, "Leg", twist)}
     scene_meta.record("leg_" + side, nodes=[grp], info=extras)
     logger.info("Leg setup complete for side %s (%s)", side, extras)
@@ -343,8 +350,7 @@ def build_torso(mode):
     elif mode == "ribbon":
         mc.select(chain)
         spine_ops_ribbon_spine.build_ribbon_spine(2.0)
-        for n in ("RibbonSpine_GRP", "Spine_Ribbon_GRP"):
-            _into_group(n, grp)
+        _into_group("RibbonSpine_System", grp)
         built = [grp]
     scene_meta.record("torso", nodes=[grp], info={"build": mode})
     logger.info("Torso setup complete (%s)", mode)

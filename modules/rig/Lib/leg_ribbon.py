@@ -167,7 +167,7 @@ def _pin_joints(prefix, tag, srf, count, parent, radius, existing=None):
 
 
 def add_ribbons(prefix, rig, P, joints_per_segment=5, mid_ctrl=True, width=None,
-                existing=None):
+                existing=None, seg_tags=('thighRibbon', 'shinRibbon')):
     """Add a ribbon to the thigh and shin of an already-built leg rig.
 
     `rig` is the dict returned by leg_rig_builder.build_leg (built with
@@ -186,8 +186,8 @@ def add_ribbons(prefix, rig, P, joints_per_segment=5, mid_ctrl=True, width=None,
 
     out = {'surfaces': [], 'pins': [], 'joints': [], 'drivers': [], 'mid_ctrls': []}
 
-    segments = [('thighRibbon', 'Thigh', 'Knee', bind[0], bind[1]),
-                ('shinRibbon', 'Knee', 'Ankle', bind[1], bind[2])]
+    segments = [(seg_tags[0], 'Thigh', 'Knee', bind[0], bind[1]),
+                (seg_tags[1], 'Knee', 'Ankle', bind[1], bind[2])]
 
     for tag, g0, g1, j0, j1 in segments:
         start, end = P[g0], P[g1]
