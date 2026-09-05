@@ -70,10 +70,26 @@ def build_reverse_foot(side="L"):
     ball_piv = pivot("Ball", ball)
     ankle_piv = pivot("Ankle", ankle)
 
+    # bank pivots sit on the foot EDGES (feet bank on their sides, not
+    # around the ball's center); width estimated from foot length
+    ball_pos = mc.xform(ball, q=True, ws=True, t=True)
+    heel_pos = mc.xform(heel, q=True, ws=True, t=True)
+    toe_pos = mc.xform(toe, q=True, ws=True, t=True)
+    half_w = 0.35 * abs(toe_pos[2] - heel_pos[2]) or 4.0
+    mirror = -1.0 if side.upper().startswith("R") else 1.0
+    inner_piv = mc.group(em=True, n="{}_InnerBank_PIV".format(name))
+    mc.xform(inner_piv, ws=True, t=(ball_pos[0] - mirror * half_w,
+                                    ball_pos[1], ball_pos[2]))
+    outer_piv = mc.group(em=True, n="{}_OuterBank_PIV".format(name))
+    mc.xform(outer_piv, ws=True, t=(ball_pos[0] + mirror * half_w,
+                                    ball_pos[1], ball_pos[2]))
+
     mc.parent(ankle_piv, ball_piv)
     mc.parent(ball_piv, toe_piv)
     mc.parent(toe_piv, heel_piv)
-    mc.parent(heel_piv, top)
+    mc.parent(heel_piv, outer_piv)
+    mc.parent(outer_piv, inner_piv)
+    mc.parent(inner_piv, top)
 
     # Single-chain handles so ball and toe follow the reverse pivots
     ball_ik = mc.ikHandle(
@@ -95,6 +111,8 @@ def build_reverse_foot(side="L"):
 
     # Foot control drives the whole reverse chain
     ctl = mc.circle(n="{}_CON".format(name), nr=[0, 1, 0], sw=360, r=4)[0]
+    # yaw evaluated last so the foot can spin without gimbal-locking pitch
+    mc.setAttr(ctl + ".rotateOrder", 3)  # xzy
     ankle_pos = mc.xform(ankle, q=True, ws=True, t=True)
     mc.xform(ctl, ws=True, t=(ankle_pos[0], 0, ankle_pos[2]))
     mc.makeIdentity(ctl, apply=True, t=True, r=True, s=True)
@@ -105,7 +123,51 @@ def build_reverse_foot(side="L"):
         mc.addAttr(ctl, ln=attr, at="float", k=True)
     mc.addAttr(ctl, ln="RollBreak", at="float", k=True, dv=35.0, min=0, max=90)
     mc.connectAttr(ctl + ".ToeSpin", toe_piv + ".rotateY")
-    mc.connectAttr(ctl + ".Bank", ball_piv + ".rotateZ")
+    # Bank tips onto the matching EDGE: positive rolls over the outer edge,
+    # negative over the inner (clamped so each pivot only takes its side)
+    # Sign rule (derived, then verified live on both sides): rotZ+ lifts
+    # whatever sits at +X of the pivot, and each edge pivot must lift the
+    # foot body on its opposite side, so BOTH edges use -mirror. A fixed
+    # sign lifts one side and sinks the other through the floor.
+    bank_out = mc.createNode("clamp", n="{}_bankOut_clamp".format(name))
+    mc.setAttr(bank_out + ".maxR", 360)
+    mc.connectAttr(ctl + ".Bank", bank_out + ".inputR")
+    bank_out_sign = mc.createNode("multDoubleLinear",
+                                  n="{}_bankOut_sign".format(name))
+    mc.setAttr(bank_out_sign + ".input2", -mirror)
+    mc.connectAttr(bank_out + ".outputR", bank_out_sign + ".input1")
+    mc.connectAttr(bank_out_sign + ".output", outer_piv + ".rotateZ")
+    bank_in = mc.createNode("clamp", n="{}_bankIn_clamp".format(name))
+    mc.setAttr(bank_in + ".minR", -360)
+    mc.connectAttr(ctl + ".Bank", bank_in + ".inputR")
+    bank_in_sign = mc.createNode("multDoubleLinear",
+                                 n="{}_bankIn_sign".format(name))
+    mc.setAttr(bank_in_sign + ".input2", -mirror)
+    mc.connectAttr(bank_in + ".outputR", bank_in_sign + ".input1")
+    mc.connectAttr(bank_in_sign + ".output", inner_piv + ".rotateZ")
+
+    # Direct-manipulation pivots (AFR: "multiple pivot points on the feet"):
+    # a small selectable wedge INSIDE each driven pivot, free to rotate on
+    # top of whatever the attrs/pad contribute. The wedge is inserted into
+    # the chain so rotating it pivots everything below it.
+    def wedge(label, piv, radius=1.2):
+        w = mc.circle(n="{}_{}_pivot_CON".format(name, label),
+                      nr=(0, 1, 0), r=radius, ch=False)[0]
+        mc.delete(mc.pointConstraint(piv, w))
+        w = mc.parent(w, piv)[0]
+        mc.setAttr(w + ".overrideEnabled", 1)
+        mc.setAttr(w + ".overrideColor", 20)
+        for a in ("sx", "sy", "sz"):
+            mc.setAttr("{}.{}".format(w, a), lock=True, keyable=False)
+        # reparent the pivot's other children under the wedge
+        for child in mc.listRelatives(piv, children=True, type="transform") or []:
+            if child != w.split("|")[-1]:
+                mc.parent(child, w)
+        return w
+
+    wedge("Heel", heel_piv)
+    wedge("Toe", toe_piv)
+    wedge("Ball", ball_piv)
 
     # Single Roll with a heel break, summed with the manual per-pivot attrs:
     #   heel = HeelRoll + clamp(Roll, -360, 0)          (negative rocks back)
@@ -152,8 +214,12 @@ def _build_roll_pad(side, name, ctl):
     pos = mc.xform(ctl, q=True, ws=True, t=True)
 
     holder = mc.group(empty=True, name="{}_RollPad_GRP".format(name))
-    mc.xform(holder, ws=True, t=(pos[0] + mirror * 8.0, pos[1], pos[2]))
-    mc.parentConstraint(ctl, holder, maintainOffset=True)
+    # flat on the ground beside the foot: reads as a PEDAL (push forward =
+    # roll to the toe, pull back = rock the heel, slide sideways = bank)
+    mc.xform(holder, ws=True, t=(pos[0] + mirror * 8.0, 0.0, pos[2]))
+    mc.parentConstraint(ctl, holder, maintainOffset=True, skipRotate=("x", "z"))
+    mc.addAttr(ctl, ln="ShowRollPad", at="bool", k=True, dv=True)
+    mc.connectAttr(ctl + ".ShowRollPad", holder + ".visibility")
 
     bounds = mc.curve(name="{}_RollPad_bounds".format(name), degree=1,
                       point=[(-2.2, 0, -2.2), (2.2, 0, -2.2), (2.2, 0, 2.2),
@@ -170,9 +236,10 @@ def _build_roll_pad(side, name, ctl):
     puck = mc.parent(puck, holder, relative=True)[0]
     mc.setAttr(puck + ".overrideEnabled", 1)
     mc.setAttr(puck + ".overrideColor", 17)
+    # asymmetric Z: the heel rock needs half the range roll-through does
     mc.transformLimits(puck, tx=(-2, 2), etx=(True, True),
-                       tz=(-2, 2), etz=(True, True))
-    for a in ("ty", "rx", "ry", "rz", "sx", "sy", "sz"):
+                       tz=(-1, 2), etz=(True, True))
+    for a in ("ty", "rx", "rz", "sx", "sy", "sz"):
         mc.setAttr("{}.{}".format(puck, a), lock=True, keyable=False)
 
     # forward (+Z) rolls onto ball/toe, back (-Z) rocks the heel:
@@ -188,5 +255,7 @@ def _build_roll_pad(side, name, ctl):
     mc.setAttr(bank_gain + ".input2", 25.0 * mirror)
     mc.connectAttr(puck + ".translateX", bank_gain + ".input1")
     mc.connectAttr(bank_gain + ".output", ctl + ".Bank")
+    # third function on the same manipulator: spin the puck = toe spin
+    mc.connectAttr(puck + ".rotateY", ctl + ".ToeSpin")
     logger.debug("Built roll pad %s", holder)
     return holder
