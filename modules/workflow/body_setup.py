@@ -297,10 +297,12 @@ def build_leg(side, twist="none"):
     rig_op_reverse_foot.build_reverse_foot(side)
 
     grp = _module_grp(side, "Leg")
-    # everything the leg builders leave at world level belongs to the module
-    for orphan in ("{}_Foot_ReverseFoot_GRP", "{}_Leg_ATRIBUTES_GRP",
-                   "{}_Leg_PV_WorldSpace_LOC", "{}_Foot_CON",
-                   "{}_Heel_GUIDE"):
+    # everything the leg builders leave at world level belongs to the module.
+    # NOT the ReverseFoot_GRP: the reverse-foot tool parents it under the
+    # foot control (that is what makes the control move the leg IK), so it
+    # travels with {side}_Foot_CON.
+    for orphan in ("{}_Leg_ATRIBUTES_GRP", "{}_Leg_PV_WorldSpace_LOC",
+                   "{}_Foot_CON", "{}_Heel_GUIDE"):
         _into_group(orphan.format(side), grp)
     extras = {"twist": twist, "twists_driven": _add_twist(side, "Leg", twist)}
     scene_meta.record("leg_" + side, nodes=[grp], info=extras)
