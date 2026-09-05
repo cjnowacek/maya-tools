@@ -332,6 +332,20 @@ class ToolsetTab(QtWidgets.QWidget):
             if named_params:
                 self._show_generic(False)
                 param_meta = meta.get("params", {})
+                group_forms = {}
+
+                def form_for(pmeta):
+                    group = pmeta.get("group")
+                    if not group:
+                        return self.params_form
+                    if group not in group_forms:
+                        box = QtWidgets.QGroupBox(group)
+                        form = QtWidgets.QFormLayout(box)
+                        form.setContentsMargins(8, 4, 8, 6)
+                        self.params_form.addRow(box)
+                        group_forms[group] = form
+                    return group_forms[group]
+
                 for name, param in named_params:
                     default = (
                         param.default
@@ -354,7 +368,7 @@ class ToolsetTab(QtWidgets.QWidget):
                     label = pmeta.get("label", name) + ":"
                     if pmeta.get("tooltip"):
                         field.setToolTip(pmeta["tooltip"])
-                    self.params_form.addRow(label, field)
+                    form_for(pmeta).addRow(label, field)
                     self.param_widgets[name] = field
             else:
                 self._show_generic(True)
@@ -375,6 +389,22 @@ class ToolsetTab(QtWidgets.QWidget):
         """
         pmeta = pmeta or {}
         choices = pmeta.get("choices")
+        if choices and pmeta.get("radio"):
+            # mutually exclusive build choices: radio row
+            container = QtWidgets.QWidget()
+            row = QtWidgets.QHBoxLayout(container)
+            row.setContentsMargins(0, 0, 0, 0)
+            group = QtWidgets.QButtonGroup(container)
+            container._radio_group = group
+            for c in choices:
+                btn = QtWidgets.QRadioButton(str(c))
+                btn._value = c
+                group.addButton(btn)
+                row.addWidget(btn)
+                if c == default:
+                    btn.setChecked(True)
+            row.addStretch()
+            return container
         if choices:
             widget = QtWidgets.QComboBox()
             for c in choices:
@@ -414,7 +444,11 @@ class ToolsetTab(QtWidgets.QWidget):
             widget = self.param_widgets.get(name)
             if widget is None:
                 continue
-            if isinstance(widget, QtWidgets.QComboBox):
+            if hasattr(widget, "_radio_group"):
+                for btn in widget._radio_group.buttons():
+                    if btn._value == value:
+                        btn.setChecked(True)
+            elif isinstance(widget, QtWidgets.QComboBox):
                 idx = widget.findData(value)
                 if idx < 0:
                     idx = widget.findText(str(value))
@@ -433,7 +467,10 @@ class ToolsetTab(QtWidgets.QWidget):
         """Return named parameter values from the typed widgets."""
         result = {}
         for name, widget in self.param_widgets.items():
-            if isinstance(widget, QtWidgets.QComboBox):
+            if hasattr(widget, "_radio_group"):
+                checked = widget._radio_group.checkedButton()
+                result[name] = checked._value if checked else None
+            elif isinstance(widget, QtWidgets.QComboBox):
                 if widget.isEditable():
                     # typed text wins: currentData() keeps returning the last
                     # ITEM's data even after the user types something else
