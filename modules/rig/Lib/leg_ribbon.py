@@ -115,8 +115,12 @@ def _skin_ribbon(srf, drivers, start, end):
     return sc
 
 
-def _pin_joints(prefix, tag, srf, count, parent, radius):
-    """Pin `count` bind joints evenly along the surface with one uvPin node.
+def _pin_joints(prefix, tag, srf, count, parent, radius, existing=None):
+    """Pin bind joints evenly along the surface with one uvPin node.
+
+    With ``existing`` (a list of already-created skeleton joints, in order
+    along the segment), those are driven instead of creating new ones: the
+    skeleton decides which joints exist, the ribbon only drives them.
 
     The pin matrix is taken into the parent joint's space and decomposed onto
     translate / rotate / scale rather than connected to offsetParentMatrix.
@@ -131,14 +135,25 @@ def _pin_joints(prefix, tag, srf, count, parent, radius):
     cmds.setAttr(pin + '.normalAxis', 1)     # Y = surface normal
     cmds.setAttr(pin + '.tangentAxis', 2)    # Z = width  -> X ends up along V
     joints = []
+    if existing:
+        count = len(existing)
     for i in range(count):
-        v = i / float(count - 1) if count > 1 else 0.5
+        if existing:
+            # place pins at the joints' own fractions along the segment
+            # (skeleton twists sit at interior fractions, not 0..1)
+            v = (i + 1) / float(count + 1)
+        else:
+            v = i / float(count - 1) if count > 1 else 0.5
         cmds.setAttr('%s.coordinate[%d].coordinateU' % (pin, i), 0.5)
         cmds.setAttr('%s.coordinate[%d].coordinateV' % (pin, i), v)
-        j = cmds.createNode('joint', name='%s%s%02d_bind_jnt' % (prefix, tag, i + 1),
-                            parent=parent)
-        cmds.setAttr(j + '.radius', radius)
-        cmds.setAttr(j + '.jointOrient', 0, 0, 0)
+        if existing:
+            j = existing[i]
+            cmds.setAttr(j + '.jointOrient', 0, 0, 0)
+        else:
+            j = cmds.createNode('joint', name='%s%s%02d_bind_jnt' % (prefix, tag, i + 1),
+                                parent=parent)
+            cmds.setAttr(j + '.radius', radius)
+            cmds.setAttr(j + '.jointOrient', 0, 0, 0)
         mm = cmds.createNode('multMatrix', name='%s%s%02d_toParent' % (prefix, tag, i + 1))
         cmds.connectAttr('%s.outputMatrix[%d]' % (pin, i), mm + '.matrixIn[0]')
         cmds.connectAttr(parent + '.worldInverseMatrix[0]', mm + '.matrixIn[1]')
@@ -151,7 +166,8 @@ def _pin_joints(prefix, tag, srf, count, parent, radius):
     return pin, joints
 
 
-def add_ribbons(prefix, rig, P, joints_per_segment=5, mid_ctrl=True, width=None):
+def add_ribbons(prefix, rig, P, joints_per_segment=5, mid_ctrl=True, width=None,
+                existing=None):
     """Add a ribbon to the thigh and shin of an already-built leg rig.
 
     `rig` is the dict returned by leg_rig_builder.build_leg (built with
@@ -226,8 +242,9 @@ def add_ribbons(prefix, rig, P, joints_per_segment=5, mid_ctrl=True, width=None)
         _skin_ribbon(srf, [top, mid, bot], start, end)
         # Parent under the segment's own bind joint, so the exported skeleton
         # is a real hierarchy rather than a flat row of pinned joints.
+        seg_existing = (existing or {}).get(tag)
         pin, joints = _pin_joints(prefix, tag, srf, joints_per_segment,
-                                  j0, radius * 0.9)
+                                  j0, radius * 0.9, existing=seg_existing)
 
         cmds.setAttr(srf + '.visibility', lock=False)
         cmds.setAttr(srf + '.visibility', 0)
