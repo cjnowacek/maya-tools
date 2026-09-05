@@ -52,6 +52,13 @@ TOOL_META = {
             "label": "guides group",
             "tooltip": "Top group holding the guide locator chains.",
         },
+        "axis_size": {
+            "label": "guide axis size",
+            "min": 0.1,
+            "max": 100.0,
+            "tooltip": "Length of the guides' RGB axis arms (red X = bone "
+                       "direction). Re-run the guides phase to resize.",
+        },
         "twist_joints": {
             "label": "twists / segment",
             "min": 0,
@@ -74,14 +81,16 @@ TWIST_SEGMENTS = [
 ]
 
 
-def main(action="auto", mirror=1, guides_group="Guides", twist_joints=3, *args):
+def main(action="auto", mirror=1, guides_group="Guides", axis_size=3.0,
+         twist_joints=3, *args):
     action = (action or "auto").lower()
     mirror = bool(int(mirror))
     guides_group = guides_group or "Guides"
     twist_joints = int(twist_joints)
+    axis_size = float(axis_size)
 
     if action == "guides":
-        return build_guides_phase(guides_group)
+        return build_guides_phase(guides_group, axis_size)
     if action == "skeleton":
         return build_skeleton(mirror, guides_group, twist_joints)
 
@@ -90,10 +99,10 @@ def main(action="auto", mirror=1, guides_group="Guides", twist_joints=3, *args):
         return build_skeleton(mirror, guides_group, twist_joints)  # redirect
     if scene_meta.find("guides", name_fallback=guides_group):
         return build_skeleton(mirror, guides_group, twist_joints)
-    return build_guides_phase(guides_group)
+    return build_guides_phase(guides_group, axis_size)
 
 
-def build_guides_phase(guides_group="Guides"):
+def build_guides_phase(guides_group="Guides", axis_size=3.0):
     existing = scene_meta.find("guides", name_fallback=guides_group)
     if existing:
         added = []
@@ -102,9 +111,10 @@ def build_guides_phase(guides_group="Guides"):
         # limbs are NOT auto-straightened: the user places the bend, and the
         # skeleton reads it as the fold direction. straighten_limb_guides()
         # in Lib/build_locators is there for manual use if wanted.
-        tripods, oriented = build_locators.upgrade_guide_display(existing)
-        logger.info("guide display: %d tripods added, %d guides oriented",
-                    tripods, oriented)
+        tripods, oriented = build_locators.upgrade_guide_display(
+            existing, size=axis_size)
+        logger.info("guide display: %d tripods added, %d guides oriented, "
+                    "axis size %s", tripods, oriented, axis_size)
         msg = ("Guides already exist ({}). Place them, then Run again "
                "to build the skeleton.".format(existing))
         if added:
@@ -114,6 +124,7 @@ def build_guides_phase(guides_group="Guides"):
         mc.select(existing)
         return existing
     made = build_locators.build_guides("L")
+    build_locators.set_axis_size(axis_size, top=guides_group)
     mc.warning("Guides built. PLACE THEM to fit the character, then Run "
                "again (auto) to build the skeleton.")
     return made

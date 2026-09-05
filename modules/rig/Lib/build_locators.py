@@ -102,7 +102,10 @@ AXIS_TRIPOD = (
 )
 
 
-def _add_axis_tripod(loc, size=3.0):
+AXIS_WIDTH = 3.0    # curve lineWidth: thin default lines are hard to read
+
+
+def _add_axis_tripod(loc, size=3.0, width=AXIS_WIDTH):
     """RGB axis lines parented as SHAPES under the guide transform, so the
     guide's orientation is readable at a glance without extra nodes."""
     for label, vec, color in AXIS_TRIPOD:
@@ -112,8 +115,48 @@ def _add_axis_tripod(loc, size=3.0):
         shape = mc.rename(shape, "{}_axis{}Shape".format(loc, label))
         mc.setAttr(shape + ".overrideEnabled", 1)
         mc.setAttr(shape + ".overrideColor", color)
+        try:                       # lineWidth needs Maya 2019+ and a VP2 draw
+            mc.setAttr(shape + ".lineWidth", width)
+        except RuntimeError:
+            pass
         mc.parent(shape, loc, relative=True, shape=True)
         mc.delete(crv)
+
+
+def set_axis_size(size=3.0, width=AXIS_WIDTH, top="Guides"):
+    """Rescale every guide's axis tripod in place.
+
+    The CVs are rewritten rather than the transform scaled, so guide
+    scale stays 1 and nothing downstream inherits a scale factor. The
+    locator's own crosshair is matched to the same size.
+    """
+    changed = 0
+    for loc in mc.listRelatives(top, allDescendents=True, type="transform",
+                                fullPath=True) or []:
+        shapes = mc.listRelatives(loc, shapes=True, fullPath=True) or []
+        for shape in shapes:
+            short = shape.split("|")[-1]
+            if mc.nodeType(shape) == "locator":
+                for axis in "XYZ":
+                    mc.setAttr("{}.localScale{}".format(shape, axis),
+                               size * 0.35)
+                continue
+            if "_axis" not in short:
+                continue
+            label = short.split("_axis")[-1].replace("Shape", "")
+            vec = dict((a, v) for a, v, _c in AXIS_TRIPOD).get(label)
+            if not vec:
+                continue
+            mc.setAttr(shape + ".controlPoints[0]", 0, 0, 0, type="double3")
+            mc.setAttr(shape + ".controlPoints[1]",
+                       vec[0] * size, vec[1] * size, vec[2] * size,
+                       type="double3")
+            try:
+                mc.setAttr(shape + ".lineWidth", width)
+            except RuntimeError:
+                pass
+            changed += 1
+    return changed
 
 
 def _aim_guide(loc, target_pos):
@@ -184,8 +227,9 @@ def orient_guides(top="Guides"):
     return count
 
 
-def upgrade_guide_display(top="Guides", size=3.0):
-    """Retrofit axis tripods onto guides that lack them, then orient all."""
+def upgrade_guide_display(top="Guides", size=3.0, width=AXIS_WIDTH):
+    """Retrofit axis tripods onto guides that lack them, size them all to
+    `size`, then orient everything."""
     added = 0
     for loc in mc.listRelatives(top, allDescendents=True, type="transform",
                                 fullPath=True) or []:
@@ -194,8 +238,9 @@ def upgrade_guide_display(top="Guides", size=3.0):
         short = loc.split("|")[-1]
         if mc.ls("{}_axisXShape".format(short)):
             continue
-        _add_axis_tripod(short, size)
+        _add_axis_tripod(short, size, width)
         added += 1
+    set_axis_size(size, width, top)
     oriented = orient_guides(top)
     return added, oriented
 
