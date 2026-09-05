@@ -196,10 +196,56 @@ def build_reverse_foot(side="L"):
         mc.connectAttr(pma + ".output1D", piv + ".rotateX")
 
     _build_roll_pad(side, name, ctl)
+    _build_roll_ring(side, name, ctl, ball)
 
     mc.select(ctl)
     logger.debug("Built reverse foot %s", top)
     return ctl
+
+
+def _build_roll_ring(side, name, ctl, ball):
+    """Primary roll interface: an arc AT the ball of the foot, rotated
+    directly (a rotation input for a rotation result, applied where the
+    animator is looking). rotateX -> Roll, rotateZ -> Bank, rotateY ->
+    ToeSpin: the whole foot vocabulary on one in-place manipulator.
+
+    The ring rides the foot control but NOT the roll itself: its rotation
+    is consumed as network input, so it stays grabbable at the ball
+    instead of rolling away with the foot.
+    """
+    ball_pos = mc.xform(ball, q=True, ws=True, t=True)
+    holder = mc.group(empty=True, name="{}_RollRing_GRP".format(name))
+    mc.xform(holder, ws=True, t=ball_pos)
+    mc.parentConstraint(ctl, holder, maintainOffset=True)
+
+    ring = mc.circle(name="{}_RollRing_CON".format(name), normal=(1, 0, 0),
+                     radius=5.0, sweep=360, ch=False)[0]
+    ring = mc.parent(ring, holder, relative=True)[0]
+    mc.setAttr(ring + ".overrideEnabled", 1)
+    mc.setAttr(ring + ".overrideColor", 13)
+    mc.setAttr(ring + ".rotateOrder", 3)  # xzy, same as the foot control
+    for a in ("tx", "ty", "tz", "sx", "sy", "sz"):
+        mc.setAttr("{}.{}".format(ring, a), lock=True, keyable=False)
+
+    # rotation IS the value: 1:1 into the shared network. The pad (if
+    # visible) drives the same attrs, so use one or the other per shot.
+    for src, dst in (("rotateX", "Roll"), ("rotateZ", "Bank"),
+                     ("rotateY", "ToeSpin")):
+        plug = "{}.{}".format(ctl, dst)
+        existing = mc.listConnections(plug, s=True, d=False, plugs=True)
+        if existing:
+            # the pad connected first; insert a sum so both inputs work
+            pma = mc.createNode("plusMinusAverage",
+                               n="{}_{}_inputSum".format(name, dst))
+            mc.connectAttr(existing[0], pma + ".input1D[0]", force=True)
+            mc.connectAttr("{}.{}".format(ring, src), pma + ".input1D[1]")
+            mc.connectAttr(pma + ".output1D", plug, force=True)
+        else:
+            mc.connectAttr("{}.{}".format(ring, src), plug)
+    mc.addAttr(ctl, ln="ShowRollRing", at="bool", k=True, dv=True)
+    mc.connectAttr(ctl + ".ShowRollRing", holder + ".visibility")
+    logger.debug("Built roll ring %s", ring)
+    return ring
 
 
 def _build_roll_pad(side, name, ctl):
